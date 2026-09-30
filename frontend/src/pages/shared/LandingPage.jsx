@@ -24,7 +24,7 @@ import { useAuth } from "../../context/AuthContext";
 import API_URL from "../../config";
 import axios from "axios";
 import banner from "../../assets/bannerimage.png";
-import PropertyCard from "../../components/common/propertyCard";
+import PropertyCard from "../../components/common/PropertyCard";
 import logo from "../../assets/hexagonlogo1.png";
 
 const LandingPage = () => {

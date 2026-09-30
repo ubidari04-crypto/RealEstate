@@ -5,7 +5,7 @@ import { useNavigate, useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import axios from 'axios';
 import API_URL from '../../config';
-import PropertyCard from '../../components/common/propertyCard';
+import PropertyCard from '../../components/common/PropertyCard';
 
 import {
   HiBadgeCheck,

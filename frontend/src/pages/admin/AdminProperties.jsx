@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { adminPropertiesStyles as s } from '../../assets/dummyStyles';
 import { useAuth } from '../../context/AuthContext';
-import PropertyCard from '../../components/common/propertyCard';
+import PropertyCard from '../../components/common/PropertyCard';
 import axios from 'axios';
 import API_URL from '../../config';
 import { Link } from 'react-router-dom';
