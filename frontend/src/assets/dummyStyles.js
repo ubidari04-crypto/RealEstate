@@ -85,7 +85,7 @@ export const adminInquiriesStyles = {
   emptyText: "text-text-muted",
 };
 
-export const AdminPropertiesStyles = {
+export const adminPropertiesStyles = {
   // Loader
   loaderFullPage: "loader-full-page",
   loader: "loader",

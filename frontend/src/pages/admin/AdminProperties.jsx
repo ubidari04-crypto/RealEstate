@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { AdminPropertiesStyles as s } from '../../assets/dummyStyles';
+import { adminPropertiesStyles as s } from '../../assets/dummyStyles';
 import { useAuth } from '../../context/AuthContext';
 import PropertyCard from '../../components/common/PropertyCard';
 import axios from 'axios';
