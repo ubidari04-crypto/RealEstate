@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Navigate, Outlet, Route, Routes, useLocation } from "react-router-dom";
 import LandingPage from './pages/shared/LandingPage';
-import Properties from './pages/shared/properties';
+import Properties from './pages/shared/Properties';
 import PropertyDetails from './pages/shared/PropertyDetails';
 import Register from './pages/auth/Register';
 import VerifyEmail from './pages/auth/VerifyEmail';
