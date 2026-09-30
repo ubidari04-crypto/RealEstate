@@ -10,7 +10,7 @@ import {
   HiOutlinePencilAlt,
   HiOutlineTrash,
 } from "react-icons/hi";
-import PropertyCard from "../../components/common/propertyCard";
+import PropertyCard from "../../components/common/PropertyCard";
 
 const MyProperties = () => {
   const [properties, setProperties] = useState([]);

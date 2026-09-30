@@ -16,7 +16,7 @@ import {
   HiPlus,
 } from "react-icons/hi";
 import { Link } from "react-router-dom";
-import PropertyCard from "../../components/common/propertyCard";
+import PropertyCard from "../../components/common/PropertyCard";
 
 const SellerDashboard = () => {
   const { token } = useAuth();

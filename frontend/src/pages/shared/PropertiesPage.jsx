@@ -6,7 +6,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import API_URL from '../../config';
 import Navbar from '../../components/common/Navbar';
-import PropertyCard from '../../components/common/propertyCard';
+import PropertyCard from '../../components/common/PropertyCard';
 
 const Properties = () => {
     const navigate = useNavigate();
