@@ -120,14 +120,14 @@ const PropertyCard = ({
         {/* Property Image Section */}
         <div
           className={`${s.imageSection} relative w-full overflow-hidden bg-gray-100 ${
-            compact ? "h-[250px]" : "h-[460px]"
+            compact ? "h-62.5" : "h-115"
           }`}
         >
           <div
             className={
               compact
                 ? "h-full w-full"
-                : "mx-auto h-full w-full max-w-[380px]"
+                : "mx-auto h-full w-full max-w-95"
             }
           >
             <img
