@@ -1,10 +1,11 @@
+
 import React, { useEffect, useState } from "react";
 import { sellerDashboardStyles as s } from "../../assets/dummyStyles";
 import { useAuth } from "../../context/AuthContext";
 import axios from "axios";
 import API_URL from "../../config";
 import {
-    HiOutlineBell,
+  HiOutlineBell,
   HiOutlineCheckCircle,
   HiOutlineDownload,
   HiOutlineEye,
@@ -41,27 +42,39 @@ const SellerDashboard = () => {
           axios.get(`${API_URL}/api/property/seller/dashboard`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
+
           axios.get(`${API_URL}/api/property/my`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
+
           axios.get(`${API_URL}/api/inquiry/seller`, {
             headers: { Authorization: `Bearer ${token}` },
           }),
         ]);
 
-        setStats(statsRes.data.stats || statsRes.data);
+        const dashboardStats = statsRes.data.stats || statsRes.data;
 
         const fetchedProperties = Array.isArray(propsRes.data)
           ? propsRes.data
           : propsRes.data.properties || [];
+
+        // Calculate sold properties directly from seller listings.
+        const actualSoldCount = fetchedProperties.filter(
+          (property) => property.status === "sold"
+        ).length;
+
+        setStats({
+          ...dashboardStats,
+          soldProperties: actualSoldCount,
+        });
 
         setProperties(fetchedProperties);
 
         const fetchedInquiries = Array.isArray(inqRes.data?.inquiries)
           ? inqRes.data.inquiries
           : Array.isArray(inqRes.data)
-            ? inqRes.data
-            : [];
+          ? inqRes.data
+          : [];
 
         setInquiries(fetchedInquiries.slice(0, 3));
       } catch (err) {
@@ -90,13 +103,21 @@ const SellerDashboard = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      setProperties((previousProperties) =>
-        previousProperties.filter((property) => property._id !== id)
+      const updatedProperties = properties.filter(
+        (property) => property._id !== id
       );
+
+      setProperties(updatedProperties);
 
       setStats((previousStats) => ({
         ...previousStats,
-        totalProperties: Math.max(0, previousStats.totalProperties - 1),
+        totalProperties: Math.max(
+          0,
+          previousStats.totalProperties - 1
+        ),
+        soldProperties: updatedProperties.filter(
+          (property) => property.status === "sold"
+        ).length,
       }));
     } catch (err) {
       console.error("Failed to delete property:", err);
@@ -105,6 +126,14 @@ const SellerDashboard = () => {
   };
 
   const handleStatusUpdate = async (id, currentStatus) => {
+    // A booked property must not be manually changed to available or sold.
+    if (currentStatus === "booked") {
+      alert(
+        "This property is already booked by a buyer. Its status is managed by the booking and payment system."
+      );
+      return;
+    }
+
     const newStatus = currentStatus === "sold" ? "sale" : "sold";
 
     try {
@@ -116,13 +145,20 @@ const SellerDashboard = () => {
         }
       );
 
-      setProperties((previousProperties) =>
-        previousProperties.map((property) =>
-          property._id === id
-            ? { ...property, status: newStatus }
-            : property
-        )
+      const updatedProperties = properties.map((property) =>
+        property._id === id
+          ? { ...property, status: newStatus }
+          : property
       );
+
+      setProperties(updatedProperties);
+
+      setStats((previousStats) => ({
+        ...previousStats,
+        soldProperties: updatedProperties.filter(
+          (property) => property.status === "sold"
+        ).length,
+      }));
     } catch (err) {
       console.error("Failed to update property status:", err);
       alert("Failed to update status.");
@@ -135,7 +171,15 @@ const SellerDashboard = () => {
   };
 
   const handleExport = () => {
-    const headers = ["Title", "Location", "Type", "Price", "Status", "Views"];
+    const headers = [
+      "Title",
+      "Location",
+      "Type",
+      "Price",
+      "Status",
+      "Verification Status",
+      "Views",
+    ];
 
     const csvRows = properties.map((property) => [
       property.title,
@@ -143,6 +187,7 @@ const SellerDashboard = () => {
       property.propertyType,
       property.price,
       property.status,
+      property.verificationStatus || "pending",
       property.views || 0,
     ]);
 
@@ -194,6 +239,7 @@ const SellerDashboard = () => {
     },
   ];
 
+  // Search seller properties.
   const filteredProperties = properties
     .filter((property) => {
       const search = searchTerm.toLowerCase();
@@ -204,7 +250,40 @@ const SellerDashboard = () => {
         property.area?.toLowerCase().includes(search)
       );
     })
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt) - new Date(a.createdAt)
+    );
+
+  // Priority:
+  // 1. SOLD properties
+  // 2. BOOKED properties
+  // 3. Rejected properties
+  // 4. Other properties
+  // Display the first 4 properties.
+  const displayedProperties = [
+    ...filteredProperties.filter(
+      (property) => property.status === "sold"
+    ),
+
+    ...filteredProperties.filter(
+      (property) => property.status === "booked"
+    ),
+
+    ...filteredProperties.filter(
+      (property) =>
+        property.status !== "sold" &&
+        property.status !== "booked" &&
+        property.verificationStatus === "rejected"
+    ),
+
+    ...filteredProperties.filter(
+      (property) =>
+        property.status !== "sold" &&
+        property.status !== "booked" &&
+        property.verificationStatus !== "rejected"
+    ),
+  ].slice(0, 4);
 
   if (loading) {
     return (
@@ -250,6 +329,7 @@ const SellerDashboard = () => {
               <div className={s.statIconWrapper}>
                 <Icon size={20} />
               </div>
+
               <div className={s.statTitle}>{card.title}</div>
               <div className={s.statValue}>{card.value}</div>
             </div>
@@ -263,6 +343,7 @@ const SellerDashboard = () => {
 
           <div className={s.searchWrapper}>
             <HiOutlineSearch className={s.searchIcon} />
+
             <input
               type="text"
               placeholder="Search listings..."
@@ -275,43 +356,125 @@ const SellerDashboard = () => {
 
         {filteredProperties.length === 0 ? (
           <div className={s.emptyListings}>
-            No properties found mathching... {searchTerm && `"${searchTerm}"`}
+            No properties found matching...
+            {searchTerm && ` "${searchTerm}"`}
           </div>
         ) : (
           <>
             <div className={s.propertiesGrid}>
-              {filteredProperties.slice(0, 3).map((property) => (
+              {displayedProperties.map((property) => (
                 <PropertyCard
                   key={property._id}
                   property={property}
                   renderActions={() => (
                     <div className={s.propertyActions}>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          handleStatusUpdate(property._id, property.status);
-                        }}
-                        className={s.statusButton(property.status)}
-                        title={
-                          property.status === "sold"
-                            ? "Mark as Available"
-                            : "Mark as Sold"
-                        }
-                      >
-                        <HiOutlineCheckCircle size={14} />
-                        {property.status === "sold" ? "Available" : "Sold"}
-                      </button>
 
+                      {/* SOLD PROPERTY BADGE */}
+                      {property.status === "sold" && (
+                        <div className="w-full mb-3">
+                          <span className="inline-flex items-center gap-2 rounded-full bg-red-100 border border-red-200 px-4 py-2 text-xs font-bold tracking-wider text-red-700">
+                            <HiOutlineCheckCircle size={15} />
+                            PROPERTY SOLD
+                          </span>
+
+                          <p className="mt-2 text-xs font-medium text-green-700">
+                            Full payment completed successfully.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* BOOKED PROPERTY BADGE */}
+                      {property.status === "booked" && (
+                        <div className="w-full mb-3">
+                          <span className="inline-flex items-center gap-2 rounded-full bg-yellow-100 border border-yellow-200 px-4 py-2 text-xs font-bold tracking-wider text-yellow-800">
+                            <HiOutlineCheckCircle size={15} />
+                            PROPERTY BOOKED
+                          </span>
+
+                          <p className="mt-2 text-xs font-medium text-yellow-700">
+                            Advance payment received. Remaining payment pending.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* PROPERTY VERIFICATION STATUS */}
+                      <div className="w-full mb-2">
+                        <span
+                          className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                            property.verificationStatus === "approved"
+                              ? "bg-green-100 text-green-700"
+                              : property.verificationStatus === "rejected"
+                              ? "bg-red-100 text-red-700"
+                              : "bg-yellow-100 text-yellow-700"
+                          }`}
+                        >
+                          {property.verificationStatus === "approved"
+                            ? "Admin Approved"
+                            : property.verificationStatus === "rejected"
+                            ? "Admin Rejected"
+                            : "Pending Verification"}
+                        </span>
+                      </div>
+
+                      {/* ADMIN REJECTION REASON */}
+                      {property.verificationStatus === "rejected" && (
+                        <div className="w-full mb-3 rounded-lg border border-red-200 bg-red-50 p-3">
+                          <p className="text-sm font-semibold text-red-700">
+                            Property Rejected by Admin
+                          </p>
+
+                          <p className="mt-1 text-sm text-red-600">
+                            {property.rejectionReason ||
+                              "Please review your property information and correct the issues."}
+                          </p>
+
+                          <p className="mt-2 text-xs font-medium text-red-700">
+                            Please correct the issues and submit your property
+                            again for verification.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* SOLD / AVAILABLE BUTTON */}
+                      {property.status !== "booked" && (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleStatusUpdate(
+                              property._id,
+                              property.status
+                            );
+                          }}
+                          className={s.statusButton(property.status)}
+                          title={
+                            property.status === "sold"
+                              ? "Mark as Available"
+                              : "Mark as Sold"
+                          }
+                        >
+                          <HiOutlineCheckCircle size={14} />
+
+                          {property.status === "sold"
+                            ? "Available"
+                            : "Sold"}
+                        </button>
+                      )}
+
+                      {/* EDIT PROPERTY */}
                       <Link
                         to={`/edit-property/${property._id}`}
                         className={s.editButton}
                         onClick={(event) => event.stopPropagation()}
                       >
                         <HiOutlinePencilAlt size={14} />
-                        Edit
+
+                        {property.verificationStatus === "rejected"
+                          ? "Correct & Resubmit"
+                          : "Edit"}
                       </Link>
 
+                      {/* DELETE PROPERTY */}
                       <button
                         type="button"
                         onClick={(event) => {
@@ -329,9 +492,13 @@ const SellerDashboard = () => {
               ))}
             </div>
 
-            {filteredProperties.length > 3 && (
+            {/* SHOW MORE */}
+            {filteredProperties.length > 4 && (
               <div className={s.showMoreWrapper}>
-                <Link to="/my-properties" className={s.showMoreButton}>
+                <Link
+                  to="/my-properties"
+                  className={s.showMoreButton}
+                >
                   Show More Listings{" "}
                   <HiOutlinePencilAlt
                     size={18}
@@ -345,70 +512,80 @@ const SellerDashboard = () => {
           </>
         )}
       </div>
+
       <div className={s.widgetsGrid}>
         <div className={s.inquiriesWidget}>
-            <h2 className={s.widgetTitle}>Recent Lead Inquiries</h2>
-            <p className={s.widgetSubtitle}>
-                New messages from potential buyers.
-            </p>
+          <h2 className={s.widgetTitle}>Recent Lead Inquiries</h2>
 
-            <div className={s.inquiriesList}>
-                {inquiries.map((inq, i) => (
-                    <div key={inq._id} className={s.inquiryItem}>
-                        <div className={s.inquiryLeft}>
-                            <div className={s.inquiryIcon}>
-                                <HiOutlineBell size={18} color="var(--primary)"  />
-                            </div>
+          <p className={s.widgetSubtitle}>
+            New messages from potential buyers.
+          </p>
 
-                            <div>
-                                <div className={s.inquiryName}>
-                                    {inq.buyer?.name || "Potentail Buyer"}
-                                </div>
-                                <div className={s.inquiryProperty}>
-                                    {inq.property?.title?.length > 30
-                                    ? inq.property?.title?.slice(0,30) + "..."
-                                    : inq.property?.title}
+          <div className={s.inquiriesList}>
+            {inquiries.map((inq) => (
+              <div key={inq._id} className={s.inquiryItem}>
+                <div className={s.inquiryLeft}>
+                  <div className={s.inquiryIcon}>
+                    <HiOutlineBell size={18} color="var(--primary)" />
+                  </div>
 
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className={s.inquiryRight}>
-                            <div className={s.inquiryDate}>
-                                {new Date(inq.createdAt).toLocaleDateString()}
-                            </div>
-                            <span className={s.inquiryStatus(inq.status)}>
-                                {inq.status === "read" ? "Read" : "New"}
-                            </span>
-                        </div>
+                  <div>
+                    <div className={s.inquiryName}>
+                      {inq.buyer?.name || "Potential Buyer"}
                     </div>
-                ))}
-                {inquiries.length === 0 && (
-                    <p className={s.noInquiries}>No Recent Inquires</p>
-                )}
-            </div>
+
+                    <div className={s.inquiryProperty}>
+                      {inq.property?.title?.length > 30
+                        ? inq.property?.title.slice(0, 30) + "..."
+                        : inq.property?.title}
+                    </div>
+                  </div>
+                </div>
+
+                <div className={s.inquiryRight}>
+                  <div className={s.inquiryDate}>
+                    {new Date(inq.createdAt).toLocaleDateString()}
+                  </div>
+
+                  <span className={s.inquiryStatus(inq.status)}>
+                    {inq.status === "read" ? "Read" : "New"}
+                  </span>
+                </div>
+              </div>
+            ))}
+
+            {inquiries.length === 0 && (
+              <p className={s.noInquiries}>
+                No Recent Inquiries
+              </p>
+            )}
+          </div>
         </div>
 
         <div className={s.tipsWidget}>
-            <h2 className={s.widgetTitle}>Quick Tips</h2>
-            <div className={s.tipsList}>
-                <div className={s.tipCardHighViews}>
-                    <h4 className={s.tipTitleHighViews}>
-                        <HiOutlineEye size={16} /> High Views!
-                    </h4>
-                    <p className={s.tipTextHighViews}>
-                        Your listings are trending. try adding video tours to increase
-                         interest.
-                    </p>
-                </div>
-                <div className={s.tipCardMarket}>
-                    <h4 className={s.tipTitleMarket}>Market Insight</h4>
-                    <p className={s.tipTextMarket}>
-                        Property in your area are selling fast. Your prices are
-                         competitive.
-                    </p>
-                </div>
+          <h2 className={s.widgetTitle}>Quick Tips</h2>
+
+          <div className={s.tipsList}>
+            <div className={s.tipCardHighViews}>
+              <h4 className={s.tipTitleHighViews}>
+                <HiOutlineEye size={16} /> High Views!
+              </h4>
+
+              <p className={s.tipTextHighViews}>
+                Your listings are trending. Try adding video tours to
+                increase interest.
+              </p>
             </div>
+
+            <div className={s.tipCardMarket}>
+              <h4 className={s.tipTitleMarket}>Market Insight</h4>
+
+              <p className={s.tipTextMarket}>
+                Property in your area are selling fast. Your prices are
+                competitive.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </>

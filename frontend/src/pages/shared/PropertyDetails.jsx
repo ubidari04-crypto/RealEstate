@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { propertyDetailsStyles as s } from '../../assets/dummyStyles';
-import Navbar from '../../components/common/Navbar';
-import { useNavigate, useParams, Link } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import axios from 'axios';
-import API_URL from '../../config';
-import PropertyCard from '../../components/common/propertyCard';
+
+import React, { useEffect, useState, useRef } from "react";
+import { propertyDetailsStyles as s } from "../../assets/dummyStyles";
+import Navbar from "../../components/common/Navbar";
+import { useNavigate, useParams, Link } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
+import axios from "axios";
+import API_URL from "../../config";
+import PropertyCard from "../../components/common/propertyCard";
 
 import {
   HiBadgeCheck,
@@ -21,7 +22,7 @@ import {
   HiOutlineUserGroup,
   HiOutlineViewGrid,
   HiX,
-} from 'react-icons/hi';
+} from "react-icons/hi";
 
 const PropertyDetails = () => {
   const { id } = useParams();
@@ -34,10 +35,10 @@ const PropertyDetails = () => {
   const [error, setError] = useState(null);
 
   const [inquiry, setInquiry] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    message: '',
+    name: "",
+    email: "",
+    phone: "",
+    message: "",
   });
 
   const [inquiryStatus, setInquiryStatus] = useState({
@@ -47,73 +48,186 @@ const PropertyDetails = () => {
   });
 
   const [isInWishlist, setIsInWishlist] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(null);
 
-  // Fetch property details
+  // Khalti booking loading state
+  const [bookingLoading, setBookingLoading] = useState(false);
+
+  // Prevent duplicate tracking from repeated effect execution
+  const trackedViews = useRef(new Set());
+
+  // ------------------------------------------
+  // FETCH PROPERTY DETAILS
+  // ------------------------------------------
+
   useEffect(() => {
+    let cancelled = false;
+
     const fetchDetails = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        const res = await axios.get(`${API_URL}/api/property/${id}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
+        const res = await axios.get(
+          `${API_URL}/api/property/${id}`,
+          {
+            headers: token
+              ? { Authorization: `Bearer ${token}` }
+              : {},
+          }
+        );
 
-        setProperty(res.data.property);
-        setSimilarProperties(res.data.similarProperties || []);
+        if (cancelled) return;
 
-        if (user && user.role === 'buyer' && token) {
-          const wishRes = await axios.get(`${API_URL}/api/wishlist`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          });
+        const fetchedProperty = res.data.property;
 
-          const found = wishRes.data.some(
-            (item) => String(item.property?._id) === String(id)
-          );
+        if (!fetchedProperty) {
+          throw new Error("Property not found.");
+        }
 
-          setIsInWishlist(found);
+        setProperty(fetchedProperty);
+
+        setSimilarProperties(
+          res.data.similarProperties || []
+        );
+
+        // ----------------------------------
+        // TRACK PROPERTY VIEW FOR BUYERS
+        // ----------------------------------
+
+        if (
+          user &&
+          user.role === "buyer" &&
+          token &&
+          fetchedProperty._id
+        ) {
+          const trackingKey = `${user._id || user.id}-${id}`;
+
+          if (!trackedViews.current.has(trackingKey)) {
+            trackedViews.current.add(trackingKey);
+
+            axios
+              .post(
+                `${API_URL}/api/recommendations/track-view/${id}`,
+                {},
+                {
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                  },
+                }
+              )
+              .then((trackRes) => {
+                console.log(
+                  "Property view tracked:",
+                  trackRes.data.message
+                );
+              })
+              .catch((trackError) => {
+                trackedViews.current.delete(trackingKey);
+
+                console.error(
+                  "Failed to track property view:",
+                  trackError.response?.data ||
+                    trackError.message
+                );
+              });
+          }
+
+          // ----------------------------------
+          // FETCH BUYER WISHLIST
+          // ----------------------------------
+
+          try {
+            const wishRes = await axios.get(
+              `${API_URL}/api/wishlist`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              }
+            );
+
+            if (cancelled) return;
+
+            const wishlistData = Array.isArray(wishRes.data)
+              ? wishRes.data
+              : wishRes.data.wishlist || [];
+
+            const found = wishlistData.some(
+              (item) =>
+                String(item.property?._id || item.property) ===
+                String(id)
+            );
+
+            setIsInWishlist(found);
+          } catch (wishlistError) {
+            console.error(
+              "Failed to fetch wishlist:",
+              wishlistError.response?.data ||
+                wishlistError.message
+            );
+
+            setIsInWishlist(false);
+          }
         } else {
           setIsInWishlist(false);
         }
 
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       } catch (err) {
-        console.error('Failed to load property details:', err);
-        setError('Failed to load property details.');
+        if (cancelled) return;
+
+        console.error(
+          "Failed to load property details:",
+          err
+        );
+
+        setError(
+          err.response?.data?.message ||
+            "Failed to load property details."
+        );
+
         setLoading(false);
       }
     };
 
     fetchDetails();
+
+    return () => {
+      cancelled = true;
+    };
   }, [id, user, token]);
 
-  // Handle wishlist toggle
+  // ------------------------------------------
+  // HANDLE WISHLIST TOGGLE
+  // ------------------------------------------
+
   const handleWishlistToggle = async () => {
     if (!user) {
-      return navigate('/login');
+      return navigate("/login");
     }
 
-    if (user.role !== 'buyer') {
+    if (user.role !== "buyer") {
       return;
     }
 
     try {
       if (isInWishlist) {
-        // Remove from wishlist
-        await axios.delete(`${API_URL}/api/wishlist/${id}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        await axios.delete(
+          `${API_URL}/api/wishlist/${id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
 
         setIsInWishlist(false);
 
-        // Redirect to wishlist page after removing
-        navigate('/wishlist');
+        navigate("/wishlist");
       } else {
-        // Add to wishlist
         await axios.post(
           `${API_URL}/api/wishlist/${id}`,
           {},
@@ -127,28 +241,41 @@ const PropertyDetails = () => {
         setIsInWishlist(true);
       }
     } catch (err) {
-      console.error('Failed to update wishlist:', err);
+      console.error(
+        "Failed to update wishlist:",
+        err
+      );
+
       alert(
-        err.response?.data?.message || 'Failed to update wishlist'
+        err.response?.data?.message ||
+          "Failed to update wishlist"
       );
     }
   };
 
-  // Handle inquiry submit
+  // ------------------------------------------
+  // HANDLE INQUIRY SUBMIT
+  // ------------------------------------------
+
   const handleInquirySubmit = async (e) => {
     e.preventDefault();
 
     if (!user) {
-      return navigate('/login');
+      return navigate("/login");
     }
 
-    if (user.role !== 'buyer') {
-      return alert('Only buyers can send inquiries');
+    if (user.role !== "buyer") {
+      return alert("Only buyers can send inquiries.");
+    }
+
+    if (!inquiry.message.trim()) {
+      return;
     }
 
     setInquiryStatus({
-      ...inquiryStatus,
       loading: true,
+      success: false,
+      error: null,
     });
 
     try {
@@ -171,29 +298,41 @@ const PropertyDetails = () => {
         error: null,
       });
 
-      setInquiry({
-        ...inquiry,
-        message: '',
-      });
+      setInquiry((prev) => ({
+        ...prev,
+        message: "",
+      }));
     } catch (err) {
-      console.error('Failed to send inquiry:', err);
+      console.error(
+        "Failed to send inquiry:",
+        err
+      );
 
       setInquiryStatus({
         loading: false,
         success: false,
-        error: 'Failed to send inquiry',
+        error:
+          err.response?.data?.message ||
+          "Failed to send inquiry.",
       });
     }
   };
 
-  // Start chat
+  // ------------------------------------------
+  // START CHAT
+  // ------------------------------------------
+
   const handleChatStart = async () => {
     if (!user) {
-      return navigate('/login');
+      return navigate("/login");
     }
 
-    if (user.role !== 'buyer') {
-      return alert('Only the buyers can chat with sellers');
+    if (user.role !== "buyer") {
+      return alert("Only buyers can chat with sellers.");
+    }
+
+    if (!property?.seller?._id) {
+      return alert("Seller information is unavailable.");
     }
 
     try {
@@ -210,14 +349,16 @@ const PropertyDetails = () => {
         }
       );
 
-      const chat = res.data;
+      const chat = res.data.chat || res.data;
+
+      const images = property.images || [];
 
       await axios.post(
         `${API_URL}/api/chat/send`,
         {
           chatId: chat._id,
           text: `(Context: Interested in property "${property.title}")`,
-          image: property.images[0],
+          image: images[0] || "",
         },
         {
           headers: {
@@ -226,50 +367,126 @@ const PropertyDetails = () => {
         }
       );
 
-      navigate('/chat-messages', {
+      navigate("/chat-messages", {
         state: {
           chat,
         },
       });
     } catch (err) {
-      console.error('Error starting chat:', err);
-      alert('Failed to start chat.');
+      console.error(
+        "Error starting chat:",
+        err
+      );
+
+      alert(
+        err.response?.data?.message ||
+          "Failed to start chat."
+      );
     }
   };
 
-  const [lightboxIndex, setLightboxIndex] = useState(null);
+  // ------------------------------------------
+  // HANDLE PROPERTY BOOKING WITH KHALTI
+  // ------------------------------------------
 
-  // Loading
-  if (loading) {
-    return (
-      <div className="loader-full-page">
-        <div className="loader"></div>
-      </div>
+  const handleBooking = async () => {
+    if (!user) {
+      return navigate("/login");
+    }
+
+    if (user.role !== "buyer") {
+      return alert("Only buyers can book properties.");
+    }
+
+    if (!token) {
+      return alert("Your login session has expired. Please log in again.");
+    }
+
+    if (property.status?.toLowerCase() !== "sale") {
+      return alert("Only properties listed for sale can be booked.");
+    }
+
+    if (
+      String(property.seller?._id) ===
+      String(user._id || user.id)
+    ) {
+      return alert("You cannot book your own property.");
+    }
+
+    const propertyPrice = Number(property.price);
+
+    if (!Number.isFinite(propertyPrice) || propertyPrice <= 0) {
+      return alert("Invalid property price.");
+    }
+
+    const advanceAmount = Math.round(propertyPrice * 0.25);
+    const remainingAmount = propertyPrice - advanceAmount;
+
+    const confirmed = window.confirm(
+      `Property: ${property.title}\n\n` +
+      `Property Price: NPR ${propertyPrice.toLocaleString("en-IN")}\n\n` +
+      `Advance Payment (25%): NPR ${advanceAmount.toLocaleString("en-IN")}\n\n` +
+      `Remaining Amount (75%): NPR ${remainingAmount.toLocaleString("en-IN")}\n\n` +
+      "Do you want to proceed with Khalti payment?"
     );
-  }
 
-  // Error
-  if (error || !property) {
-    return (
-      <div
-        className="container"
-        style={{
-          padding: '4rem',
-          textAlign: 'center',
-        }}
-      >
-        {error || 'Property not found'}
-      </div>
-    );
-  }
+    if (!confirmed) return;
 
-  const formattedPrice = new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'NPR',
-    maximumFractionDigits: 0,
-  }).format(property.price);
+    try {
+      setBookingLoading(true);
 
-  // Lightbox functions
+      const response = await axios.post(
+        `${API_URL}/api/booking/initiate/${id}`,
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      console.log(
+        "Booking initiation response:",
+        response.data
+      );
+
+      const paymentUrl =
+        response.data.paymentUrl ||
+        response.data.payment_url;
+
+      if (!paymentUrl) {
+        throw new Error(
+          "Khalti payment URL was not returned by the server."
+        );
+      }
+
+      console.log(
+        "Khalti pidx:",
+        response.data.pidx
+      );
+
+      // Redirect buyer to Khalti payment page.
+      window.location.href = paymentUrl;
+    } catch (err) {
+      console.error(
+        "Booking initiation error:",
+        err.response?.data || err.message
+      );
+
+      alert(
+        err.response?.data?.message ||
+          err.message ||
+          "Unable to initiate booking. Please try again."
+      );
+
+      setBookingLoading(false);
+    }
+  };
+
+  // ------------------------------------------
+  // LIGHTBOX FUNCTIONS
+  // ------------------------------------------
+
   const openLightbox = (index) => {
     setLightboxIndex(index);
   };
@@ -279,18 +496,76 @@ const PropertyDetails = () => {
   };
 
   const nextImage = () => {
+    const images = property?.images || [];
+
+    if (images.length === 0) return;
+
     setLightboxIndex(
-      (prev) => (prev + 1) % property.images.length
+      (prev) => (prev + 1) % images.length
     );
   };
 
   const prevImage = () => {
+    const images = property?.images || [];
+
+    if (images.length === 0) return;
+
     setLightboxIndex(
       (prev) =>
-        (prev - 1 + property.images.length) %
-        property.images.length
+        (prev - 1 + images.length) % images.length
     );
   };
+
+  // ------------------------------------------
+  // LOADING STATE
+  // ------------------------------------------
+
+  if (loading) {
+    return (
+      <div className="loader-full-page">
+        <div className="loader"></div>
+      </div>
+    );
+  }
+
+  // ------------------------------------------
+  // ERROR STATE
+  // ------------------------------------------
+
+  if (error || !property) {
+    return (
+      <div
+        className="container"
+        style={{
+          padding: "4rem",
+          textAlign: "center",
+        }}
+      >
+        {error || "Property not found"}
+      </div>
+    );
+  }
+
+  const images = property.images || [];
+
+  const formattedPrice = new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "NPR",
+    maximumFractionDigits: 0,
+  }).format(property.price);
+
+  const advanceAmount = Math.round(Number(property.price) * 0.25);
+  const remainingAmount = Number(property.price) - advanceAmount;
+
+  const canBook =
+    property.status?.toLowerCase() === "sale" &&
+    (!user || user.role === "buyer") &&
+    String(property.seller?._id) !==
+      String(user?._id || user?.id);
+
+  // ------------------------------------------
+  // RENDER PAGE
+  // ------------------------------------------
 
   return (
     <div className={s.pageContainer}>
@@ -298,6 +573,7 @@ const PropertyDetails = () => {
 
       <main className={s.mainContainer}>
         {/* Breadcrumbs */}
+
         <nav className={s.breadcrumbs}>
           <Link to="/" className={s.breadcrumbLink}>
             Home
@@ -317,59 +593,78 @@ const PropertyDetails = () => {
         </nav>
 
         {/* Gallery */}
-        <div className={s.galleryContainer}>
+
+        <div
+          className={s.galleryContainer}
+          style={{
+            width: "80%",
+            margin: "0 auto",
+          }}
+        >
           <div
             className={s.galleryGrid}
             style={{
               gridTemplateColumns:
-                property.images.length > 1
-                  ? 'repeat(4, 1fr)'
-                  : '1fr',
+                images.length > 1
+                  ? "repeat(4, 1fr)"
+                  : "1fr",
 
               gridTemplateRows:
-                property.images.length > 1
-                  ? 'repeat(2, 180px)'
-                  : '400px',
+                images.length > 1
+                  ? "repeat(2, 180px)"
+                  : "clamp(350px, 32vw, 500px)",
             }}
           >
-            <div
-              className={s.galleryMainItem(
-                property.images.length > 1
-              )}
-              onClick={() => openLightbox(0)}
-            >
-              <img
-                src={property.images[0]}
-                alt="property image"
-                className={s.galleryImage}
-              />
-            </div>
+            {images.length > 0 && (
+              <>
+                <div
+                  className={s.galleryMainItem(
+                    images.length > 1
+                  )}
+                  onClick={() => openLightbox(0)}
+                >
+                  <img
+                    src={images[0]}
+                    alt="Property"
+                    className={s.galleryImage}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      objectPosition: "center",
+                      background: "transparent",
+                    }}
+                  />
+                </div>
 
-            {property.images.slice(1, 5).map((img, idx) => (
-              <div
-                key={idx}
-                className={s.gallerySideItem}
-                onClick={() => openLightbox(idx + 1)}
-              >
-                <img
-                  src={img}
-                  alt="property"
-                  className={s.galleryImage}
-                />
+                {images.slice(1, 5).map((img, idx) => (
+                  <div
+                    key={idx}
+                    className={s.gallerySideItem}
+                    onClick={() => openLightbox(idx + 1)}
+                  >
+                    <img
+                      src={img}
+                      alt="Property"
+                      className={s.galleryImage}
+                    />
 
-                {idx === 3 && property.images.length > 5 && (
-                  <div className={s.galleryMoreOverlay}>
-                    +{property.images.length - 5}
+                    {idx === 3 && images.length > 5 && (
+                      <div className={s.galleryMoreOverlay}>
+                        +{images.length - 5}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                ))}
+              </>
+            )}
           </div>
 
           {/* Mobile slider */}
+
           <div className={s.mobileSliderContainer}>
             <div className={s.mobileSliderTrack}>
-              {property.images.map((img, idx) => (
+              {images.map((img, idx) => (
                 <div
                   key={idx}
                   className={s.mobileSlide}
@@ -377,12 +672,12 @@ const PropertyDetails = () => {
                 >
                   <img
                     src={img}
-                    alt="property"
+                    alt="Property"
                     className={s.mobileSlideImage}
                   />
 
                   <div className={s.mobileSlideCounter}>
-                    {idx + 1} / {property.images.length}
+                    {idx + 1} / {images.length}
                   </div>
                 </div>
               ))}
@@ -391,57 +686,60 @@ const PropertyDetails = () => {
         </div>
 
         {/* Lightbox */}
-        {lightboxIndex !== null && (
-          <div
-            className={s.lightboxOverlay}
-            onClick={closeLightbox}
-          >
-            <button
-              onClick={closeLightbox}
-              className={s.lightboxCloseBtn}
-            >
-              <HiX
-                size={24}
-                className={s.lightboxCloseIcon}
-              />
-            </button>
 
+        {lightboxIndex !== null &&
+          images.length > 0 && (
             <div
-              onClick={(e) => e.stopPropagation()}
-              className={s.lightboxContent}
+              className={s.lightboxOverlay}
+              onClick={closeLightbox}
             >
-              <img
-                src={property.images[lightboxIndex]}
-                alt="property"
-                className={s.lightboxImage}
-              />
+              <button
+                onClick={closeLightbox}
+                className={s.lightboxCloseBtn}
+              >
+                <HiX
+                  size={24}
+                  className={s.lightboxCloseIcon}
+                />
+              </button>
 
-              {property.images.length > 1 && (
-                <>
-                  <button
-                    onClick={prevImage}
-                    className={s.lightboxPrevBtn}
-                  >
-                    <HiChevronLeft size={30} />
-                  </button>
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className={s.lightboxContent}
+              >
+                <img
+                  src={images[lightboxIndex]}
+                  alt="Property"
+                  className={s.lightboxImage}
+                />
 
-                  <button
-                    onClick={nextImage}
-                    className={s.lightboxNextBtn}
-                  >
-                    <HiChevronRight size={30} />
-                  </button>
-                </>
-              )}
+                {images.length > 1 && (
+                  <>
+                    <button
+                      onClick={prevImage}
+                      className={s.lightboxPrevBtn}
+                    >
+                      <HiChevronLeft size={30} />
+                    </button>
 
-              <div className={s.lightboxCounter}>
-                {lightboxIndex + 1} / {property.images.length}
+                    <button
+                      onClick={nextImage}
+                      className={s.lightboxNextBtn}
+                    >
+                      <HiChevronRight size={30} />
+                    </button>
+                  </>
+                )}
+
+                <div className={s.lightboxCounter}>
+                  {lightboxIndex + 1} / {images.length}
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Main content */}
+
         <div className={s.detailsLayout}>
           <div className={s.infoColumn}>
             <div className={s.infoHeader}>
@@ -468,8 +766,9 @@ const PropertyDetails = () => {
               </div>
 
               {/* Wishlist button */}
+
               <div className={s.actionButtons}>
-                {(!user || user.role === 'buyer') && (
+                {(!user || user.role === "buyer") && (
                   <button
                     onClick={handleWishlistToggle}
                     className={s.wishlistButton(isInWishlist)}
@@ -488,15 +787,16 @@ const PropertyDetails = () => {
             </div>
 
             {/* Quick stats */}
+
             <div className={s.statsGrid}>
               {[
                 {
-                  label: 'Bedrooms',
+                  label: "Bedrooms",
                   value: property.bhk || 0,
                   icon: HiOutlineHome,
                 },
                 {
-                  label: 'Bathrooms',
+                  label: "Bathrooms",
                   value:
                     property.bathrooms ||
                     Math.max(
@@ -506,17 +806,17 @@ const PropertyDetails = () => {
                   icon: HiOutlineUserGroup,
                 },
                 {
-                  label: 'Furnishing',
-                  value: property.furnishing || 'N/A',
+                  label: "Furnishing",
+                  value: property.furnishing || "N/A",
                   icon: HiCollection,
                 },
                 {
-                  label: 'Living Area',
+                  label: "Living Area",
                   value: `${property.areaSize} sqft`,
                   icon: HiOutlineViewGrid,
                 },
                 {
-                  label: 'Type',
+                  label: "Type",
                   value: property.propertyType,
                   icon: HiCalendar,
                 },
@@ -544,6 +844,7 @@ const PropertyDetails = () => {
             </div>
 
             {/* Description */}
+
             <div className={s.descriptionSection}>
               <h3 className={s.sectionTitle}>
                 Description
@@ -551,11 +852,12 @@ const PropertyDetails = () => {
 
               <p className={s.descriptionText}>
                 {property.description ||
-                  'No description available for the property'}
+                  "No description available for the property"}
               </p>
             </div>
 
             {/* Amenities */}
+
             <div className={s.amenitiesSection}>
               <h3 className={s.sectionTitle}>
                 Amenities
@@ -565,10 +867,10 @@ const PropertyDetails = () => {
                 {(property.amenities?.length
                   ? property.amenities
                   : [
-                      'Parking',
-                      'Security',
-                      'Water Supply',
-                      'Power Backup',
+                      "Parking",
+                      "Security",
+                      "Water Supply",
+                      "Power Backup",
                     ]
                 ).map((amn, i) => (
                   <div
@@ -590,37 +892,38 @@ const PropertyDetails = () => {
           </div>
 
           {/* Sidebar */}
+
           <div className={s.sidebarColumn}>
             {/* Price card */}
+
             <div
               className={s.priceCard}
               style={{
-                background: 'var(--primary)',
+                background: "var(--primary)",
               }}
             >
               <div className={s.priceCardLabel}>
-                {property.status?.toLowerCase() === 'rent'
-                  ? 'Rental Details'
-                  : 'Listing Price'}
+                {property.status?.toLowerCase() === "rent"
+                  ? "Rental Details"
+                  : "Listing Price"}
               </div>
 
               <div className={s.priceCardValue}>
-                {property.status?.toLowerCase() === 'rent'
+                {property.status?.toLowerCase() === "rent"
                   ? `₹${Number(property.price).toLocaleString(
-                      'en-IN'
+                      "en-IN"
                     )}`
                   : formattedPrice}
 
-                {property.status?.toLowerCase() ===
-                  'rent' && (
+                {property.status?.toLowerCase() === "rent" && (
                   <span className={s.priceCardPeriod}>
-                    {' '}
+                    {" "}
                     /month
                   </span>
                 )}
               </div>
 
-              {property.status?.toLowerCase() === 'rent' && (
+              {property.status?.toLowerCase() === "rent" && (
                 <div className={s.rentDetails}>
                   <div className={s.rentDetailRow}>
                     <span className={s.rentDetailLabel}>
@@ -628,10 +931,10 @@ const PropertyDetails = () => {
                     </span>
 
                     <span className={s.rentDetailValue}>
-                      RS{' '}
+                      RS{" "}
                       {Number(
                         property.securityDeposit || 0
-                      ).toLocaleString('en-NP')}
+                      ).toLocaleString("en-NP")}
                     </span>
                   </div>
 
@@ -641,10 +944,10 @@ const PropertyDetails = () => {
                     </span>
 
                     <span className={s.rentDetailValue}>
-                      RS{' '}
+                      RS{" "}
                       {Number(
                         property.maintenace || 0
-                      ).toLocaleString('en-NP')}
+                      ).toLocaleString("en-NP")}
                       /mo
                     </span>
                   </div>
@@ -652,14 +955,62 @@ const PropertyDetails = () => {
               )}
 
               <div className={s.priceCardAvailability}>
-                Available for{' '}
-                {property.status?.toLowerCase() === 'rent'
-                  ? 'Rent'
-                  : 'Sale'}
+                Available for{" "}
+                {property.status?.toLowerCase() === "rent"
+                  ? "Rent"
+                  : "Sale"}
               </div>
             </div>
 
+            {/* Book Now Button */}
+
+            {canBook && (
+              <div className="bg-white rounded-xl shadow-md p-5 mb-5">
+                <h3 className="text-lg font-bold text-gray-800 mb-2">
+                  Interested in this property?
+                </h3>
+
+                <p className="text-sm text-gray-500 mb-4">
+                  Pay 25% advance through Khalti to initiate your booking.
+                </p>
+
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-gray-600">
+                    Advance (25%)
+                  </span>
+
+                  <span className="font-semibold text-gray-800">
+                    NPR {advanceAmount.toLocaleString("en-IN")}
+                  </span>
+                </div>
+
+                <div className="flex justify-between text-sm mb-4">
+                  <span className="text-gray-600">
+                    Remaining (75%)
+                  </span>
+
+                  <span className="font-semibold text-gray-800">
+                    NPR {remainingAmount.toLocaleString("en-IN")}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleBooking}
+                  disabled={bookingLoading}
+                  className="w-full bg-teal-600 hover:bg-teal-700 disabled:bg-gray-400 text-white font-semibold py-3 rounded-lg transition duration-200"
+                >
+                  {bookingLoading
+                    ? "Processing..."
+                    : user
+                    ? "Book Now"
+                    : "Login to Book"}
+                </button>
+              </div>
+            )}
+
             {/* Seller & contact */}
+
             <div className={s.sellerCard}>
               <div className={s.sellerInfo}>
                 <div className={s.sellerAvatar}>
@@ -667,7 +1018,7 @@ const PropertyDetails = () => {
                     src={
                       property.seller?.profilePic ||
                       `https://ui-avatars.com/api/?name=${
-                        property.seller?.name || 'Seller'
+                        property.seller?.name || "Seller"
                       }&background=0d6e59&color=fff`
                     }
                     alt="Agent"
@@ -678,20 +1029,21 @@ const PropertyDetails = () => {
                 <div className={s.sellerDetails}>
                   <div className={s.sellerNameLink}>
                     <h4 className={s.sellerName}>
-                      {property.seller?.name || 'Seller'}
+                      {property.seller?.name || "Seller"}
                     </h4>
                   </div>
 
                   <div className={s.sellerVerifiedBadge}>
                     <HiBadgeCheck
                       className={s.verifiedIcon}
-                    />{' '}
+                    />{" "}
                     Verified Seller
                   </div>
                 </div>
               </div>
 
               {/* Chat */}
+
               <div className={s.chatButtonWrapper}>
                 <button
                   className={s.chatButton}
@@ -701,22 +1053,23 @@ const PropertyDetails = () => {
                 </button>
               </div>
 
-              {/* Inquiry Form */}
+              {/* Inquiry form */}
+
               <h4 className={s.inquiryFormTitle}>
                 Inquire
               </h4>
 
               <form onSubmit={handleInquirySubmit}>
-                {user?.role === 'buyer' ? (
+                {user?.role === "buyer" ? (
                   <>
                     <textarea
                       placeholder="Your Message..."
                       value={inquiry.message}
                       onChange={(e) =>
-                        setInquiry({
-                          ...inquiry,
+                        setInquiry((prev) => ({
+                          ...prev,
                           message: e.target.value,
-                        })
+                        }))
                       }
                       className={s.inquiryTextarea}
                       required
@@ -728,16 +1081,12 @@ const PropertyDetails = () => {
                       disabled={inquiryStatus.loading}
                     >
                       {inquiryStatus.loading
-                        ? 'Sending...'
-                        : 'Send Inquiry'}
+                        ? "Sending..."
+                        : "Send Inquiry"}
                     </button>
 
                     {inquiryStatus.success && (
-                      <p
-                        className={
-                          s.inquirySuccessMessage
-                        }
-                      >
+                      <p className={s.inquirySuccessMessage}>
                         Inquiry sent!
                       </p>
                     )}
@@ -754,17 +1103,11 @@ const PropertyDetails = () => {
                     )}
                   </>
                 ) : (
-                  <div
-                    className={s.inquiryDisabledMessage}
-                  >
-                    <p
-                      className={
-                        s.inquiryDisabledText
-                      }
-                    >
+                  <div className={s.inquiryDisabledMessage}>
+                    <p className={s.inquiryDisabledText}>
                       {user
-                        ? 'Only buyers can send inquiries.'
-                        : 'Please login as a buyer to send inquiries.'}
+                        ? "Only buyers can send inquiries."
+                        : "Please login as a buyer to send inquiries."}
                     </p>
 
                     {!user && (
@@ -783,6 +1126,7 @@ const PropertyDetails = () => {
         </div>
 
         {/* Additional Details */}
+
         <div className={s.additionalDetails}>
           <h3 className={s.detailsTitle}>
             Property Details
@@ -791,23 +1135,23 @@ const PropertyDetails = () => {
           <div className={s.detailsGrid}>
             {[
               {
-                label: 'Property ID',
+                label: "Property ID",
                 value: property._id
                   .slice(-8)
                   .toUpperCase(),
               },
               {
-                label: 'Added On',
+                label: "Added On",
                 value: new Date(
                   property.createdAt
                 ).toLocaleDateString(),
               },
               {
-                label: 'Property Type',
+                label: "Property Type",
                 value: property.propertyType,
               },
               {
-                label: 'Status',
+                label: "Status",
                 value: `For ${property.status}`,
               },
             ].map((detail, i) => (
@@ -828,6 +1172,7 @@ const PropertyDetails = () => {
         </div>
 
         {/* Similar Properties */}
+
         <section className={s.similarSection}>
           <div className={s.similarHeader}>
             <div>
@@ -836,8 +1181,7 @@ const PropertyDetails = () => {
               </h2>
 
               <p className={s.similarSubtitle}>
-                Listings you might like in{' '}
-                {property.city}.
+                Listings you might like in {property.city}.
               </p>
             </div>
 
@@ -861,8 +1205,7 @@ const PropertyDetails = () => {
                 ))
             ) : (
               <div className={s.similarEmptyState}>
-                No similar properties found in this
-                location.
+                No similar properties found in this location.
               </div>
             )}
           </div>

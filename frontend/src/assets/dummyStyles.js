@@ -613,162 +613,169 @@ export const profileStyles = {
 export const landingPageStyles = {
   // Layout
   bgMain: "bg-bg-main",
-  container: "container ",
+  container: "container",
 
   // Hero section
   heroSection:
-    "fade-in items-center justify-center  hero-section pt-32 pb-16 xl:px-40 md:px-20 flex items-center gap-16 overflow-hidden md:flex-col lg:flex-col xl:flex-row max-lg:flex-col max-lg:text-center max-lg:pt-28 max-lg:pb-8 max-lg:px-4 max-lg:gap-8",
+    "fade-in items-center justify-center hero-section pt-32 pb-16 xl:px-20 md:px-10 flex items-center gap-12 overflow-hidden md:flex-col lg:flex-col xl:flex-row max-lg:flex-col max-lg:text-center max-lg:pt-28 max-lg:pb-8 max-lg:px-4 max-lg:gap-8",
   heroContent:
     "hero-content flex-1 max-lg:flex max-lg:flex-col max-lg:items-center",
-  badge: "badge bg-primary-light text-primary-dark mb-6 inline-block",
+  
+  // Cleaned up the top badge (No border, soft gray background)
+  badge: "badge bg-[#f1f5f9] text-[#475569] border-none rounded mb-6 inline-block text-xs font-bold uppercase px-3 py-1 tracking-wider",
+  
   heroTitle:
-    "hero-title text-[clamp(2rem,5vw,4.5rem)] mb-6 transition-all duration-300 max-lg:text-[clamp(1.75rem,8vw,2.5rem)] max-lg:leading-tight max-lg:text-center",
-  textGradient: "text-gradient",
+    "hero-title text-[clamp(2rem,4vw,3.5rem)] font-bold mb-4 text-[#0f172a] leading-tight max-lg:text-center",
+  textGradient: "text-[#0f172a]",
   heroSubtitle:
-    "hero-subtitle text-[1.125rem] text-text-muted mb-12 max-w-[540px] max-lg:text-base max-lg:mb-10 max-lg:mx-auto max-lg:text-center max-lg:px-4",
+    "hero-subtitle text-[1.1rem] text-[#475569] mb-10 max-w-[540px] max-lg:mx-auto max-lg:text-center",
 
-  // Search form
+  // Search form (Removed glassmorphism and extreme rounding)
   searchForm:
-    "glass search-form p-5 rounded-[2rem] flex items-center gap-4 shadow-[0_20px_40px_rgba(0,0,0,0.08)] max-w-[900px] border border-white/50 relative z-10 max-lg:flex-col max-lg:w-full max-lg:max-w-[500px] max-lg:mx-auto max-lg:gap-2 max-lg:rounded-[1.5rem]",
+    "bg-white search-form p-4 rounded-lg flex items-center gap-4 shadow-md border border-[#e2e8f0] max-w-[900px] relative z-10 max-lg:flex-col max-lg:w-full max-lg:rounded-lg",
   searchField:
-    "search-field flex-[1.2] flex items-center gap-3 py-2 px-3 transition-all duration-300 min-w-[220px] max-lg:w-full max-lg:py-4 max-lg:px-2 max-lg:border-b max-lg:border-[#f1f5f9]",
+    "search-field flex-[1.2] flex items-center gap-3 py-2 px-3 transition-all duration-300 min-w-[220px] max-lg:w-full max-lg:border-b max-lg:border-[#f1f5f9]",
   textPrimary: "text-primary",
   flexCol: "flex flex-col flex-1",
   labelSmall:
-    "text-[0.7rem] font-extrabold text-text-muted uppercase tracking-[0.05em] mb-1",
+    "text-[0.7rem] font-bold text-[#64748b] uppercase tracking-wider mb-1",
   inputTransparent:
-    "border-none bg-transparent outline-none w-full text-base font-semibold text-text-main",
+    "border-none bg-transparent outline-none w-full text-[0.95rem] font-medium text-text-main",
   searchDivider:
-    "search-divider w-[1px] h-[44px] bg-border-color opacity-60 shrink-0 max-lg:hidden",
+    "search-divider w-[1px] h-[36px] bg-[#e2e8f0] shrink-0 max-lg:hidden",
   searchButton:
-    "btn btn-primary search-button h-[64px] min-w-[140px] rounded-[1.25rem] text-base font-bold shadow-[0_12px_24px_rgba(13,148,136,0.25)] flex items-center justify-center gap-2 max-lg:w-full max-lg:h-[56px] max-lg:rounded-2xl max-lg:mt-2",
+    "btn btn-primary h-[50px] min-w-[140px] rounded-md text-[0.95rem] font-bold shadow-sm flex items-center justify-center gap-2 max-lg:w-full max-lg:h-[48px]",
 
   // Stats
   statsContainer:
-    "stats-container flex gap-[clamp(1rem,3vw,4rem)] mt-16 max-lg:justify-center max-lg:gap-8 max-md:flex-wrap",
+    "stats-container flex gap-[clamp(1rem,3vw,4rem)] mt-12 max-lg:justify-center max-lg:gap-8 max-md:flex-wrap",
   statItemFlex: "flex-1 max-md:flex-none max-md:shrink-0 max-md:basis-[120px]",
-  statNumber: "text-[clamp(1.5rem,3vw,2rem)] font-extrabold",
+  statNumber: "text-[clamp(1.25rem,2.5vw,1.75rem)] font-bold text-[#0f172a]",
   statLabel:
-    "uppercase text-[0.7rem] text-text-muted font-extrabold tracking-[0.05em]",
+    "uppercase text-[0.7rem] text-[#64748b] font-bold tracking-wider mt-1",
   statItemBorder:
-    "stat-item border-l border-border-color pl-[clamp(1rem,3vw,4rem)] flex-1 max-lg:pl-8 max-md:border-none max-md:pl-0 max-md:flex-none max-md:shrink-0 max-md:basis-[120px]",
+    "stat-item border-l border-[#e2e8f0] pl-[clamp(1rem,3vw,4rem)] flex-1 max-lg:pl-8 max-md:border-none max-md:pl-0 max-md:flex-none max-md:shrink-0 max-md:basis-[120px]",
 
-  // Hero image
+  // Hero image (Removed excessive border-radius and massive shadow)
   heroImageContainer: "hero-image-container flex-1 relative ",
   imageWrapper:
-    "rounded-[3rem] overflow-hidden shadow-[0_40px_80px_-20px_rgba(0,0,0,0.25)] relative",
-  heroImage: "w-full h-[600px] object-cover",
+    "rounded-xl overflow-hidden shadow-lg border border-[#e2e8f0] relative",
+  heroImage: "w-full h-[500px] object-cover",
+  
+  // Floating Verified Card (Removed dark border, kept subtle shadow)
   verifiedBadge:
-    "glass absolute bottom-8 left-8 p-6 rounded-3xl flex items-center gap-4 max-w-[300px]",
-  badgeIconWrapper: "bg-primary-light p-3 rounded-2xl",
-  badgeTitle: "text-[0.9375rem] m-0 font-bold",
-  badgeText: "text-[0.75rem] text-text-muted m-0",
-  preApproved: "badge bg-primary/10 text-primary text-[0.625rem]",
+    "bg-white border-none shadow-md absolute bottom-6 left-6 p-4 rounded-lg flex items-center gap-3 max-w-[280px]",
+  badgeIconWrapper: "bg-[#f8fafc] p-2 rounded-md text-primary border border-[#e2e8f0]",
+  badgeTitle: "text-[0.9rem] m-0 font-bold text-[#0f172a]",
+  badgeText: "text-[0.75rem] text-[#64748b] m-0 mt-0.5",
+  
+  // Cleaned up the inner badge (No border)
+  preApproved: "badge bg-[#f0fdf4] text-[#166534] border-none rounded px-2 py-0.5 text-[0.6rem] font-bold uppercase",
 
-  // Category section
-  categorySection: "py-24 bg-bg-alt",
+  // Category section (Standardized cards)
+  categorySection: "py-24 bg-[#f8fafc]",
   categoryHeader:
     "category-header flex justify-between items-end mb-12 max-sm:flex-col max-sm:items-start max-sm:gap-6",
   categoryHeaderText: "max-w-[500px]",
-  categoryTitle: "text-[2.5rem] font-extrabold mb-4 max-sm:text-[2rem]",
-  categoryDesc: "text-text-muted",
+  categoryTitle: "text-[2rem] font-bold text-[#0f172a] mb-3",
+  categoryDesc: "text-[#64748b]",
   categoryGrid:
     "category-grid grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-6 max-sm:grid-cols-2 max-sm:gap-4",
   categoryCard:
-    "category-card py-10 px-6 text-center cursor-pointer bg-white rounded-3xl border border-[#e2e8f0] transition-all duration-300 shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05)] hover:-translate-y-2 hover:border-primary hover:shadow-[0_12px_25px_-5px_rgba(13,148,136,0.1)] group max-sm:py-6 max-sm:px-4",
+    "category-card py-8 px-6 text-center cursor-pointer bg-white rounded-lg border border-[#e2e8f0] transition-all duration-200 shadow-sm hover:-translate-y-1 hover:border-[#cbd5e1] hover:shadow-md group max-sm:py-6 max-sm:px-4",
   categoryIconWrapper:
-    "category-icon-wrapper w-16 h-16 bg-primary-light text-primary rounded-[1.25rem] flex items-center justify-center mx-auto mb-6 transition-all duration-300 group-hover:bg-primary group-hover:text-white group-hover:scale-110 max-sm:w-12 max-sm:h-12 max-sm:mb-4 max-sm:rounded-2xl",
-  categoryName: "mb-2 text-xl font-bold max-sm:text-base",
-  categoryCount: "text-text-muted text-[0.875rem]",
+    "category-icon-wrapper w-14 h-14 bg-[#f8fafc] border border-[#e2e8f0] text-primary rounded-md flex items-center justify-center mx-auto mb-5 transition-colors duration-200 group-hover:bg-[#f1f5f9] max-sm:w-12 max-sm:h-12 max-sm:mb-4",
+  categoryName: "mb-1 text-[1.1rem] font-bold text-[#0f172a] max-sm:text-base",
+  categoryCount: "text-[#64748b] text-[0.85rem]",
 
   // Features section
-  featuresSection: "py-32",
+  featuresSection: "py-24 bg-white border-y border-[#e2e8f0]",
   featuresContainer:
-    "container features-container flex gap-24 items-center max-lg:flex-col max-lg:gap-12",
+    "container features-container flex gap-16 items-center max-lg:flex-col max-lg:gap-12",
   featuresList:
-    "features-list-container flex-1 grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-8 max-md:grid-cols-1 max-md:gap-8",
+    "features-list-container flex-1 grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-6 max-md:grid-cols-1",
   featureCard:
-    "fade-in feature-card-item p-8 bg-white rounded-3xl border border-[#e2e8f0] transition-all duration-300 flex flex-col items-start hover:border-primary hover:-translate-y-[5px] hover:shadow-[0_10px_25px_-5px_rgba(0,0,0,0.05)]",
+    "fade-in feature-card-item p-6 bg-[#f8fafc] rounded-lg border border-[#e2e8f0] transition-all duration-200 flex flex-col items-start hover:bg-white hover:shadow-sm",
   featureIconWrapper:
-    "w-14 h-14 bg-primary-light text-primary rounded-2xl flex items-center justify-center mb-6",
-  featureTitle: "text-[1.125rem] mb-3 font-extrabold",
-  featureDesc: "text-text-muted text-[0.875rem] leading-relaxed",
+    "w-12 h-12 bg-white border border-[#e2e8f0] text-primary rounded-md flex items-center justify-center mb-5 shadow-sm",
+  featureTitle: "text-[1.1rem] mb-2 font-bold text-[#0f172a]",
+  featureDesc: "text-[#64748b] text-[0.9rem] leading-relaxed",
   featuresContent: "flex-1",
-  featuresHeading: "text-[clamp(2rem,4vw,3.5rem)] font-extrabold mb-8",
-  featuresSubtext: "text-text-muted text-[1.125rem] mb-12 leading-[1.8]",
-  featuresListItems: "flex flex-col gap-6",
-  listItem: "flex items-center gap-4 font-medium",
+  featuresHeading: "text-[2rem] font-bold text-[#0f172a] mb-6",
+  featuresSubtext: "text-[#475569] text-[1rem] mb-10 leading-relaxed",
+  featuresListItems: "flex flex-col gap-5",
+  listItem: "flex items-center gap-3 font-medium text-[#0f172a]",
   learnMoreLink:
-    "inline-block mt-12 text-primary font-semibold border-b-2 hover:text-primary-dark",
+    "inline-block mt-10 text-primary font-bold hover:text-[#0f172a] transition-colors",
 
   // How It Works section
-  processSection: "py-32 bg-bg-main",
-  processHeader: "text-center mb-20",
-  processBadge: "badge bg-primary/10 text-primary mb-4 inline-block",
-  processTitle: "text-5xl mb-6 max-sm:text-4xl text-text-main font-extrabold",
-  processSubtitle: "text-text-muted max-w-[600px] mx-auto text-lg",
+  processSection: "py-24 bg-[#f8fafc]",
+  processHeader: "text-center mb-16",
+  processBadge: "badge bg-white border border-[#e2e8f0] text-[#475569] rounded px-3 py-1 text-xs font-bold uppercase tracking-wider mb-4 inline-block shadow-sm",
+  processTitle: "text-[2rem] mb-4 text-[#0f172a] font-bold",
+  processSubtitle: "text-[#64748b] max-w-[600px] mx-auto text-[1rem]",
   processGrid:
-    "process-grid grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-12 relative max-md:gap-14",
+    "process-grid grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-8 relative",
   processCard:
-    "process-card py-12 px-8 bg-white/40 backdrop-blur-md rounded-[2rem] border border-white/50 relative transition-all duration-300 text-center hover:-translate-y-2 hover:bg-white hover:shadow-[0_20px_40px_rgba(0,0,0,0.06)] hover:border-primary-light",
+    "process-card py-10 px-8 bg-white rounded-lg border border-[#e2e8f0] relative transition-all duration-200 text-center shadow-sm hover:shadow-md hover:border-[#cbd5e1]",
   stepNumber:
-    "absolute -top-6 left-1/2 -translate-x-1/2 w-16 h-16 bg-primary text-white rounded-[1.5rem] flex items-center justify-center text-2xl font-extrabold shadow-[0_8px_20px_rgba(13,148,136,0.3)]",
+    "absolute -top-5 left-1/2 -translate-x-1/2 w-10 h-10 bg-[#0f172a] text-white rounded-md flex items-center justify-center text-[1rem] font-bold shadow-sm",
   processIconWrapper:
-    "w-20 h-20 bg-primary-light text-primary rounded-[2rem] flex items-center justify-center mx-auto mt-4 mb-8",
-  processCardTitle: "text-[1.5rem] mb-4 font-bold",
-  processCardDesc: "text-text-muted leading-[1.7]",
+    "w-16 h-16 bg-[#f8fafc] border border-[#e2e8f0] text-primary rounded-md flex items-center justify-center mx-auto mt-2 mb-6",
+  processCardTitle: "text-[1.1rem] mb-3 font-bold text-[#0f172a]",
+  processCardDesc: "text-[#64748b] text-[0.9rem] leading-[1.6]",
 
   // Featured Collections section
-  featuredSection: "py-24 bg-bg-alt",
-  featuredHeader: "text-center mb-16",
-  featuredBadge: "badge bg-primary-light text-primary mb-4 inline-block",
-  featuredTitle: "text-5xl mb-6 max-sm:text-4xl font-extrabold text-text-main",
-  featuredSubtitle: "text-text-muted max-w-[600px] mx-auto text-lg pt-1 pb-1",
+  featuredSection: "py-24 bg-white border-t border-[#e2e8f0]",
+  featuredHeader: "text-center mb-12",
+  featuredBadge: "badge bg-[#f8fafc] border border-[#e2e8f0] text-[#475569] rounded px-3 py-1 text-xs font-bold uppercase tracking-wider mb-4 inline-block",
+  featuredTitle: "text-[2rem] mb-4 font-bold text-[#0f172a]",
+  featuredSubtitle: "text-[#64748b] max-w-[600px] mx-auto text-[1rem]",
   loadingContainer: "flex justify-center items-center py-20 min-h-[400px]",
   loader:
-    "loader w-10 h-10 border-4 border-solid border-secondary border-t-primary rounded-full animate-spin mx-auto",
+    "loader w-10 h-10 border-4 border-solid border-[#e2e8f0] border-t-primary rounded-full animate-spin mx-auto",
   errorContainer: "text-center py-20 text-red-500 min-h-[300px]",
   propertiesGrid:
-    "grid gap-8 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3",
-  discoverButtonContainer: "text-center mt-20",
-  discoverButton: "btn btn-primary py-4 px-12 rounded-3xl",
+    "grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3",
+  discoverButtonContainer: "text-center mt-12",
+  discoverButton: "btn btn-primary py-3 px-8 rounded-md font-bold",
 
-  // Footer
-  footer: "bg-white border-t border-[#e2e8f0] pt-24 pb-0",
+  // Footer (Cleaned up inputs and borders)
+  footer: "bg-[#f8fafc] border-t border-[#e2e8f0] pt-20 pb-0",
   footerMainGrid:
-    "footer-main-grid grid grid-cols-[1.5fr_1fr_1fr_1.5fr] gap-16 mb-16 max-lg:grid-cols-2 max-lg:gap-12 max-sm:grid-cols-1 min-[640px]:max-[1024px]:justify-items-center",
+    "footer-main-grid grid grid-cols-[1.5fr_1fr_1fr_1.5fr] gap-12 mb-12 max-lg:grid-cols-2 max-sm:grid-cols-1 min-[640px]:max-[1024px]:justify-items-center",
   footerBrand:
     "footer-brand-section max-sm:text-center max-sm:flex max-sm:flex-col max-sm:items-center",
   brandLogo:
-    "flex items-center gap-2 text-2xl font-extrabold text-primary mb-6",
-  brandIcon: "bg-primary text-white py-1.5 px-2.5 rounded-xl text-base",
-  brandDesc: "text-text-muted mb-8 leading-relaxed text-[0.9375rem]",
-  socialIcons: "flex gap-4",
+    "flex items-center gap-2 text-xl font-bold text-[#0f172a] mb-5",
+  brandIcon: "bg-[#0f172a] text-white py-1 px-2 rounded-[4px] text-[0.9rem]",
+  brandDesc: "text-[#64748b] mb-6 leading-relaxed text-[0.9rem]",
+  socialIcons: "flex gap-3",
   socialIcon:
-    "social-icon w-9 h-9 rounded-full bg-bg-alt flex items-center justify-center text-text-main transition-all duration-300 hover:-translate-y-1 hover:bg-primary hover:text-white",
-  footerHeading: "text-[1.125rem] font-extrabold mb-8",
-  footerLinks: "flex flex-col gap-5 text-text-muted text-[0.9375rem]",
+    "social-icon w-8 h-8 rounded-md bg-white border border-[#e2e8f0] flex items-center justify-center text-[#64748b] transition-colors duration-200 hover:bg-[#0f172a] hover:text-white hover:border-[#0f172a]",
+  footerHeading: "text-[1rem] font-bold mb-6 text-[#0f172a]",
+  footerLinks: "flex flex-col gap-4 text-[#64748b] text-[0.9rem]",
   footerLink:
-    "footer-link transition-colors duration-300 hover:text-primary hover:underline",
+    "footer-link transition-colors duration-200 hover:text-[#0f172a]",
   contactInfo: "flex items-center gap-3",
   contactInfoStart: "flex items-start gap-3",
-  contactIcon: "shrink-0 mt-[2px] text-xl",
-  newsletterDesc: "text-text-muted text-[0.875rem] mb-6 leading-relaxed",
+  contactIcon: "shrink-0 mt-[2px] text-[1.1rem]",
+  newsletterDesc: "text-[#64748b] text-[0.9rem] mb-4 leading-relaxed",
   newsletterInputWrapper: "relative",
   newsletterInput:
-    "w-full py-4 pr-[85px] pl-5 rounded-2xl border border-[#e2e8f0] bg-bg-alt outline-none text-[0.875rem] focus:border-primary transition-colors",
+    "w-full py-3 pr-[90px] pl-4 rounded-md border border-[#e2e8f0] bg-white outline-none text-[0.9rem] focus:border-primary transition-colors",
   newsletterButton:
-    "btn btn-primary absolute right-1.5 top-1.5 bottom-1.5 px-5 rounded-xl text-[0.8125rem]",
+    "btn btn-primary absolute right-1 top-1 bottom-1 px-4 rounded-[4px] text-[0.8rem]",
   bottomBar:
-    "border-t border-[#e2e8f0] py-8 flex flex-col gap-4 text-[0.875rem] text-text-muted",
+    "border-t border-[#e2e8f0] py-6 flex flex-col gap-4 text-[0.85rem] text-[#64748b]",
   bottomBarFlex:
     "flex justify-between items-center flex-wrap gap-4 max-sm:flex-col-reverse max-sm:justify-center",
   footerLegalLinks:
-    "flex gap-8 max-sm:w-full max-sm:justify-center max-sm:flex-wrap max-sm:gap-4",
-  designCredit: "flex justify-center items-center gap-2 pt-2",
-  designLogo: "w-5 h-5 object-contain",
+    "flex gap-6 max-sm:w-full max-sm:justify-center max-sm:flex-wrap",
+  designCredit: "flex justify-center items-center gap-2 pt-1",
+  designLogo: "w-4 h-4 object-contain",
   designLink:
-    "font-semibold text-primary hover:text-blue-700 hover:underline transition-colors duration-300",
+    "font-bold text-[#0f172a] hover:text-primary transition-colors duration-200",
 };
 
 export const propertiesStyles = {
@@ -1188,7 +1195,7 @@ export const sellerSidebarStyles = {
 export const logoStyles = {
   link: "font-bold text-primary flex items-center gap-3 no-underline whitespace-nowrap",
   iconWrapper: "bg-primary text-white p-2 rounded-[10px] flex items-center justify-center shadow-[0_4px_12px_rgba(13,110,89,0.2)]",
-  text: "tracking-[-0.02em] text-[#0d6e59] font-extrabold",
+  text: "tracking-[-0.02em] text-black font-extrabold",
 };
 
 export const navbarStyles = {

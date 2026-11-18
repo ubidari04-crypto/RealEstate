@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { landingPageStyles as s } from "../../assets/dummyStyles";
 import Navbar from "../../components/common/Navbar";
@@ -12,6 +13,9 @@ import {
   HiSearch,
   HiShieldCheck,
   HiVideoCamera,
+  HiSparkles,
+  HiRefresh,
+  HiInformationCircle,
 } from "react-icons/hi";
 import {
   FaFacebookF,
@@ -35,8 +39,21 @@ const LandingPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Personalized recommendations
+  const [recommendations, setRecommendations] = useState([]);
+  const [recommendationLoading, setRecommendationLoading] =
+    useState(false);
+  const [recommendationError, setRecommendationError] =
+    useState("");
+
   const [searchTerm, setSearchTerm] = useState("");
   const [propertyType, setPropertyType] = useState("Select Type");
+
+  // District and dependent area filters
+  const [district, setDistrict] = useState("");
+  const [area, setArea] = useState("");
+  const [districts, setDistricts] = useState([]);
+  const [areas, setAreas] = useState([]);
 
   const [propertyCounts, setPropertyCounts] = useState({
     flat: 0,
@@ -47,43 +64,217 @@ const LandingPage = () => {
 
   const [wishlistedIds, setWishlistedIds] = useState([]);
 
+  // Initial data loading
   useEffect(() => {
     fetchProperties();
     fetchCounts();
+  }, []);
 
+  // Fetch wishlist when the user logs in
+  useEffect(() => {
     if (user && token) {
       fetchWishlist();
+    } else {
+      setWishlistedIds([]);
     }
   }, [user, token]);
 
+  // Fetch personalized recommendations for buyers only
+  useEffect(() => {
+    if (user?.role === "buyer" && token) {
+      fetchRecommendations();
+    } else {
+      setRecommendations([]);
+      setRecommendationError("");
+      setRecommendationLoading(false);
+    }
+  }, [user, token]);
+
+  // Fetch available districts from the backend
+  useEffect(() => {
+    const fetchDistricts = async () => {
+      try {
+        const res = await axios.get(
+          `${API_URL}/api/property/locations`
+        );
+
+        if (res.data.success) {
+          setDistricts(res.data.districts || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch districts:", err);
+      }
+    };
+
+    fetchDistricts();
+  }, []);
+
+  // Fetch areas belonging to the selected district
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchAreas = async () => {
+      if (!district) {
+        setAreas([]);
+        return;
+      }
+
+      try {
+        const res = await axios.get(
+          `${API_URL}/api/property/locations`,
+          {
+            params: { district },
+          }
+        );
+
+        if (!cancelled && res.data.success) {
+          setAreas(res.data.areas || []);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Failed to fetch areas:", err);
+          setAreas([]);
+        }
+      }
+    };
+
+    fetchAreas();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [district]);
+
+  // Fetch wishlist
   const fetchWishlist = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/wishlist`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const res = await axios.get(
+        `${API_URL}/api/wishlist`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const items = Array.isArray(res.data)
+        ? res.data
+        : res.data.wishlist || [];
 
       setWishlistedIds(
-        res.data
+        items
           .filter((item) => item.property)
           .map((item) => String(item.property._id))
       );
     } catch (err) {
-      console.error("Failed to fetch the wishlist", err);
+      console.error("Failed to fetch the wishlist:", err);
+    }
+  };
+
+  // Fetch personalized recommendations
+  const fetchRecommendations = async () => {
+    if (!token || user?.role !== "buyer") return;
+
+    try {
+      setRecommendationLoading(true);
+      setRecommendationError("");
+
+      const res = await axios.get(
+        `${API_URL}/api/recommendations`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = res.data || {};
+
+      // Support a best match and a list of similar properties.
+      const candidates = [];
+
+      if (data.bestMatch) {
+        candidates.push(data.bestMatch);
+      }
+
+      const recommendationList =
+        data.recommendations ||
+        data.similarProperties ||
+        data.properties ||
+        [];
+
+      if (Array.isArray(recommendationList)) {
+        candidates.push(...recommendationList);
+      }
+
+      // Normalize recommendation objects and remove duplicates.
+      const normalized = candidates
+        .map((item) => {
+          const property =
+            item?.property ||
+            item?.listing ||
+            item;
+
+          if (!property || !property._id) return null;
+
+          return {
+            property,
+            score:
+              item.score ??
+              item.matchScore ??
+              item.similarityScore ??
+              property.recommendationScore ??
+              null,
+            reason:
+              item.reason ||
+              item.explanation ||
+              property.recommendationReason ||
+              "",
+          };
+        })
+        .filter(Boolean);
+
+      const uniqueRecommendations = normalized.filter(
+        (item, index, array) =>
+          array.findIndex(
+            (other) =>
+              String(other.property._id) ===
+              String(item.property._id)
+          ) === index
+      );
+
+      setRecommendations(uniqueRecommendations);
+    } catch (err) {
+      console.error(
+        "FAILED_TO_FETCH_RECOMMENDATIONS:",
+        err
+      );
+
+      setRecommendationError(
+        err.response?.data?.message ||
+          "Unable to load personalized recommendations."
+      );
+
+      setRecommendations([]);
+    } finally {
+      setRecommendationLoading(false);
     }
   };
 
   // Toggle property wishlist
   const handleToggleWishlist = async (propertyId) => {
+    if (!user || !token) {
+      navigate("/login");
+      return;
+    }
+
+    const id = String(propertyId);
+    const isWishlisted = wishlistedIds.includes(id);
+
     try {
-      const propertyIdString = String(propertyId);
-
-      const isWishlisted = wishlistedIds.includes(propertyIdString);
-
       if (isWishlisted) {
         await axios.delete(
-          `${API_URL}/api/wishlist/${propertyId}`,
+          `${API_URL}/api/wishlist/${id}`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -92,11 +283,11 @@ const LandingPage = () => {
         );
 
         setWishlistedIds((prev) =>
-          prev.filter((id) => String(id) !== propertyIdString)
+          prev.filter((itemId) => itemId !== id)
         );
       } else {
         await axios.post(
-          `${API_URL}/api/wishlist/${propertyId}`,
+          `${API_URL}/api/wishlist/${id}`,
           {},
           {
             headers: {
@@ -105,10 +296,7 @@ const LandingPage = () => {
           }
         );
 
-        setWishlistedIds((prev) => [
-          ...prev,
-          propertyIdString,
-        ]);
+        setWishlistedIds((prev) => [...prev, id]);
       }
     } catch (err) {
       console.error("Failed to toggle wishlist:", err);
@@ -118,23 +306,31 @@ const LandingPage = () => {
   // Fetch property counts
   const fetchCounts = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/property/counts`);
+      const res = await axios.get(
+        `${API_URL}/api/property/counts`
+      );
 
       if (res.data.success) {
-        setPropertyCounts(res.data.counts);
+        setPropertyCounts({
+          flat: 0,
+          villa: 0,
+          penthouse: 0,
+          commercial: 0,
+          ...res.data.counts,
+        });
       }
     } catch (err) {
       console.error("Failed to fetch property counts:", err);
     }
   };
 
-  // Fetch properties
-  const fetchProperties = async (search = "") => {
+  // Fetch featured properties
+  const fetchProperties = async () => {
     try {
       setLoading(true);
 
       const res = await axios.get(
-        `${API_URL}/api/property?city=${search}`
+        `${API_URL}/api/property`
       );
 
       setProperties(
@@ -143,25 +339,33 @@ const LandingPage = () => {
 
       setError(null);
     } catch (err) {
-      setError(
-        "Failed to load properties. Please try again"
-      );
+      console.error("Failed to fetch properties:", err);
+      setError("Failed to load properties. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
+  // Search and navigate to the properties page
   const handleSearch = (e) => {
     e.preventDefault();
 
     const params = new URLSearchParams();
 
-    if (searchTerm) {
-      params.append("city", searchTerm);
+    if (district) {
+      params.set("district", district);
+    }
+
+    if (area) {
+      params.set("area", area);
+    }
+
+    if (searchTerm.trim()) {
+      params.set("city", searchTerm.trim());
     }
 
     if (propertyType !== "Select Type") {
-      params.append("type", propertyType);
+      params.set("type", propertyType);
     }
 
     navigate(`/properties?${params.toString()}`);
@@ -235,71 +439,124 @@ const LandingPage = () => {
           </h1>
 
           <p className={s.heroSubtitle}>
-            Experience the most advance real estate search platform.
+            Experience the most advanced real estate search platform.
             Discover verified listings, connect with top agents, and
             find a place you'll love.
           </p>
 
+          {/* District, Area, City and Property Type Search */}
           <form
             onSubmit={handleSearch}
-            className={s.searchForm}
+            className={`${s.searchForm} flex flex-wrap items-center gap-3`}
           >
-            <div className={s.searchField}>
+            {/* District */}
+            <div className={`${s.searchField} min-w-0 flex-1`}>
               <div className={s.textPrimary}>
                 <HiLocationMarker size={26} />
               </div>
 
-              <div className={s.flexCol}>
+              <div className={`${s.flexCol} min-w-0 flex-1`}>
                 <label className={s.labelSmall}>
-                  Location
+                  District
+                </label>
+
+                <select
+                  value={district}
+                  onChange={(e) => {
+                    setDistrict(e.target.value);
+                    setArea("");
+                  }}
+                  className={`${s.inputTransparent} w-full cursor-pointer`}
+                >
+                  <option value="">All districts</option>
+
+                  {districts.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className={s.searchDivider}></div>
+
+            {/* Area */}
+            <div className={`${s.searchField} min-w-0 flex-1`}>
+              <div className={s.textPrimary}>
+                <HiLocationMarker size={26} />
+              </div>
+
+              <div className={`${s.flexCol} min-w-0 flex-1`}>
+                <label className={s.labelSmall}>
+                  Area
+                </label>
+
+                <select
+                  value={area}
+                  onChange={(e) => setArea(e.target.value)}
+                  disabled={!district}
+                  className={`${s.inputTransparent} w-full cursor-pointer disabled:opacity-50`}
+                >
+                  <option value="">
+                    {district ? "All areas" : "Select district first"}
+                  </option>
+
+                  {areas.map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className={s.searchDivider}></div>
+
+            {/* City */}
+            <div className={`${s.searchField} min-w-0 flex-1`}>
+              <div className={s.textPrimary}>
+                <HiLocationMarker size={26} />
+              </div>
+
+              <div className={`${s.flexCol} min-w-0 flex-1`}>
+                <label className={s.labelSmall}>
+                  City (optional)
                 </label>
 
                 <input
                   type="text"
-                  placeholder="Where are you looking?"
+                  placeholder="Enter city"
                   value={searchTerm}
-                  onChange={(e) =>
-                    setSearchTerm(e.target.value)
-                  }
-                  className={s.inputTransparent}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className={`${s.inputTransparent} w-full`}
                 />
               </div>
             </div>
 
             <div className={s.searchDivider}></div>
 
-            <div className={s.searchField}>
+            {/* Property Type */}
+            <div className={`${s.searchField} min-w-0 flex-1`}>
               <div className={s.textPrimary}>
                 <HiHome size={26} />
               </div>
 
-              <div className={s.flexCol}>
+              <div className={`${s.flexCol} min-w-0 flex-1`}>
                 <label className={s.labelSmall}>
                   Property Type
                 </label>
 
                 <select
                   value={propertyType}
-                  onChange={(e) =>
-                    setPropertyType(e.target.value)
-                  }
-                  className={`${s.inputTransparent} cursor-pointer`}
+                  onChange={(e) => setPropertyType(e.target.value)}
+                  className={`${s.inputTransparent} w-full cursor-pointer`}
                 >
-                  <option value="Select Type">
-                    Select Type
-                  </option>
-                  <option value="flat">
-                    Flat/Apartment
-                  </option>
-                  <option value="villa">
-                    Villa/House
-                  </option>
-                  <option value="penthouse">
-                    Penthouse
-                  </option>
-                  <option value="commercial">
-                    Commercial
-                  </option>
+                  <option value="Select Type">Select Type</option>
+                  <option value="flat">Flat/Apartment</option>
+                  <option value="villa">Villa/House</option>
+                  <option value="penthouse">Penthouse</option>
+                  <option value="commercial">Commercial</option>
                 </select>
               </div>
             </div>
@@ -308,7 +565,8 @@ const LandingPage = () => {
               type="submit"
               className={s.searchButton}
             >
-              <HiSearch size={22} /> Search
+              <HiSearch size={22} />
+              Search
             </button>
           </form>
 
@@ -316,23 +574,17 @@ const LandingPage = () => {
           <div className={s.statsContainer}>
             <div className={s.statItemFlex}>
               <h3 className={s.statNumber}>12K+</h3>
-              <p className={s.statLabel}>
-                Ready Properties
-              </p>
+              <p className={s.statLabel}>Ready Properties</p>
             </div>
 
             <div className={s.statItemBorder}>
               <h3 className={s.statNumber}>500+</h3>
-              <p className={s.statLabel}>
-                Agent Network
-              </p>
+              <p className={s.statLabel}>Agent Network</p>
             </div>
 
             <div className={s.statItemBorder}>
               <h3 className={s.statNumber}>4.9/5</h3>
-              <p className={s.statLabel}>
-                User Rating
-              </p>
+              <p className={s.statLabel}>User Rating</p>
             </div>
           </div>
         </div>
@@ -342,7 +594,7 @@ const LandingPage = () => {
           <div className={s.imageWrapper}>
             <img
               src={banner}
-              alt="banner"
+              alt="Real estate banner"
               className={s.heroImage}
             />
 
@@ -383,15 +635,15 @@ const LandingPage = () => {
 
               <p className={s.categoryDesc}>
                 Explore curated collections of properties
-                tailored to your specific lifistyle and needs.
+                tailored to your specific lifestyle and needs.
               </p>
             </div>
           </div>
 
           <div className={s.categoryGrid}>
-            {categories.map((cat, idx) => (
+            {categories.map((cat) => (
               <div
-                key={idx}
+                key={cat.type}
                 className={s.categoryCard}
                 onClick={() =>
                   navigate(`/properties?type=${cat.type}`)
@@ -418,24 +670,24 @@ const LandingPage = () => {
       <section className={s.featuredSection}>
         <div className={s.featuresContainer}>
           <div className={s.featuresList}>
-            {features.map((f, idx) => (
+            {features.map((feature, idx) => (
               <div
-                key={idx}
+                key={feature.title}
                 className={s.featureCard}
                 style={{
                   animationDelay: `${idx * 0.1}s`,
                 }}
               >
                 <div className={s.featureIconWrapper}>
-                  {f.icon}
+                  {feature.icon}
                 </div>
 
                 <h3 className={s.featureTitle}>
-                  {f.title}
+                  {feature.title}
                 </h3>
 
                 <p className={s.featureDesc}>
-                  {f.desc}
+                  {feature.desc}
                 </p>
               </div>
             ))}
@@ -463,21 +715,15 @@ const LandingPage = () => {
                 "Real-time market valuation data",
                 "Secure document management system",
                 "24/7 Premium customer support",
-              ].map((item, idx) => (
-                <li
-                  key={idx}
-                  className={s.listItem}
-                >
+              ].map((item) => (
+                <li key={item} className={s.listItem}>
                   <HiLightningBolt className="text-primary" />
                   {item}
                 </li>
               ))}
             </ul>
 
-            <a
-              href="#process"
-              className={s.learnMoreLink}
-            >
+            <a href="#process" className={s.learnMoreLink}>
               Learn more about our process &rarr;
             </a>
           </div>
@@ -485,10 +731,7 @@ const LandingPage = () => {
       </section>
 
       {/* How It Works */}
-      <section
-        id="process"
-        className={s.processSection}
-      >
+      <section id="process" className={s.processSection}>
         <div className={s.container}>
           <div className={s.processHeader}>
             <span className={s.processBadge}>
@@ -497,9 +740,7 @@ const LandingPage = () => {
 
             <h2 className={s.processTitle}>
               Our Seamless{" "}
-              <span className={s.textGradient}>
-                Process
-              </span>
+              <span className={s.textGradient}>Process</span>
             </h2>
 
             <p className={s.processSubtitle}>
@@ -528,25 +769,20 @@ const LandingPage = () => {
                 desc: "Every listing is strictly audited for ownership and condition, ensuring your peace of mind and a secure transaction.",
                 icon: <HiShieldCheck size={32} />,
               },
-            ].map((p, idx) => (
-              <div
-                key={idx}
-                className={s.processCard}
-              >
-                <div className={s.stepNumber}>
-                  {p.step}
-                </div>
+            ].map((item) => (
+              <div key={item.step} className={s.processCard}>
+                <div className={s.stepNumber}>{item.step}</div>
 
                 <div className={s.processIconWrapper}>
-                  {p.icon}
+                  {item.icon}
                 </div>
 
                 <h3 className={s.processCardTitle}>
-                  {p.title}
+                  {item.title}
                 </h3>
 
                 <p className={s.processCardDesc}>
-                  {p.desc}
+                  {item.desc}
                 </p>
               </div>
             ))}
@@ -554,10 +790,159 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Featured Collection */}
+      {/* Personalized Recommendations - Buyers Only */}
+      {user?.role === "buyer" && (
+        <section className="py-16 bg-emerald-50/60">
+          <div className={s.container}>
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5 mb-9">
+              <div>
+                <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-100 text-emerald-800 text-sm font-semibold mb-4">
+                  <HiSparkles size={18} />
+                  AI-Powered Recommendations
+                </span>
+
+                <h2 className="text-3xl md:text-4xl font-bold text-slate-900">
+                  Recommended For You
+                </h2>
+
+                <p className="mt-3 text-slate-600 max-w-2xl">
+                  Discover properties selected according to your
+                  preferred location, budget, property type,
+                  BHK, amenities, and interests.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate("/buyer/preferences")
+                  }
+                  className="px-5 py-3 rounded-xl bg-white border border-emerald-200 text-emerald-800 font-semibold hover:bg-emerald-100 transition"
+                >
+                  Update Preferences
+                </button>
+
+                <button
+                  type="button"
+                  onClick={fetchRecommendations}
+                  disabled={recommendationLoading}
+                  className="px-5 py-3 rounded-xl bg-emerald-700 text-white font-semibold hover:bg-emerald-800 transition disabled:opacity-60 flex items-center gap-2"
+                >
+                  <HiRefresh
+                    size={19}
+                    className={
+                      recommendationLoading ? "animate-spin" : ""
+                    }
+                  />
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {/* Recommendation loading */}
+            {recommendationLoading ? (
+              <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+                <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto" />
+
+                <p className="mt-4 text-slate-600 font-medium">
+                  Finding properties that match your preferences...
+                </p>
+              </div>
+            ) : recommendationError ? (
+              <div className="bg-white rounded-2xl border border-red-200 p-8 text-center">
+                <HiInformationCircle
+                  size={36}
+                  className="mx-auto text-red-500 mb-3"
+                />
+
+                <p className="text-red-700 font-medium">
+                  {recommendationError}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={fetchRecommendations}
+                  className="mt-5 px-5 py-2.5 rounded-lg bg-emerald-700 text-white font-semibold hover:bg-emerald-800"
+                >
+                  Try Again
+                </button>
+              </div>
+            ) : recommendations.length > 0 ? (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {recommendations.map((item, index) => (
+                    <div
+                      key={item.property._id}
+                      className="relative"
+                    >
+                      <PropertyCard
+                        property={item.property}
+                        isWishlisted={wishlistedIds.includes(
+                          String(item.property._id)
+                        )}
+                        onToggleWishlist={handleToggleWishlist}
+                      />
+
+                      {item.score !== null &&
+                        item.score !== undefined && (
+                          <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-800 text-sm font-bold">
+                            <HiSparkles size={16} />
+                            {Math.round(Number(item.score))}% Match
+                          </div>
+                        )}
+
+                      {item.reason && (
+                        <p className="mt-2 text-sm text-slate-600">
+                          {item.reason}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <p className="mt-7 text-center text-sm text-slate-500">
+                  Recommendations are generated using your saved
+                  preferences and property interests.
+                </p>
+              </>
+            ) : (
+              <div className="bg-white rounded-2xl border border-slate-200 p-9 text-center">
+                <div className="w-16 h-16 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-4">
+                  <HiSparkles
+                    size={30}
+                    className="text-emerald-700"
+                  />
+                </div>
+
+                <h3 className="text-xl font-bold text-slate-800">
+                  No Recommendations Yet
+                </h3>
+
+                <p className="text-slate-600 mt-2 max-w-xl mx-auto">
+                  We couldn't find matching properties at the
+                  moment. Update your preferences or check back
+                  when more properties become available.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate("/buyer/preferences")
+                  }
+                  className="mt-6 px-6 py-3 rounded-xl bg-emerald-700 text-white font-semibold hover:bg-emerald-800 transition"
+                >
+                  Update My Preferences
+                </button>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* Featured Collection - Existing Section */}
       <section className={s.featuredSection}>
         <div className={s.container}>
-
           <div className={s.featuredHeader}>
             <span className={s.featuredBadge}>
               Handpicked For You
@@ -585,7 +970,7 @@ const LandingPage = () => {
           ) : (
             <div className={s.propertiesGrid}>
               {properties
-                .filter((p) => p)
+                .filter(Boolean)
                 .sort(
                   (a, b) =>
                     new Date(b.createdAt) -
@@ -599,9 +984,7 @@ const LandingPage = () => {
                     isWishlisted={wishlistedIds.includes(
                       String(property._id)
                     )}
-                    onToggleWishlist={
-                      handleToggleWishlist
-                    }
+                    onToggleWishlist={handleToggleWishlist}
                   />
                 ))}
             </div>
@@ -609,37 +992,30 @@ const LandingPage = () => {
 
           <div className={s.discoverButtonContainer}>
             <button
-              onClick={() =>
-                navigate("/properties")
-              }
+              onClick={() => navigate("/properties")}
               className={s.discoverButton}
             >
               Discover More Properties
             </button>
           </div>
-
         </div>
       </section>
 
       {/* Footer */}
       <footer className={s.footer}>
         <div className={s.container}>
-
           <div className={s.footerMainGrid}>
-
+            {/* Brand */}
             <div className={s.footerBrand}>
-
               <div className={s.brandLogo}>
-                <div className={s.brandIcon}>
-                  RE
-                </div>
+                <div className={s.brandIcon}>RE</div>
                 RealEstate
               </div>
 
               <p className={s.brandDesc}>
-                The most trusted platform for buying,
-                selling, and renting Premium real estate
-                globally. We make property hunting seamless.
+                The most trusted platform for buying, selling,
+                and renting Premium real estate globally.
+                We make property hunting seamless.
               </p>
 
               <div className={s.socialIcons}>
@@ -658,65 +1034,44 @@ const LandingPage = () => {
                   </a>
                 ))}
               </div>
-
             </div>
 
             {/* Quick Links */}
             <div>
-              <h4 className={s.footerHeading}>
-                Company
-              </h4>
+              <h4 className={s.footerHeading}>Company</h4>
 
               <ul className={s.footerLinks}>
-
                 <li>
-                  <a
-                    href="/"
-                    className={s.footerLink}
-                  >
+                  <a href="/" className={s.footerLink}>
                     Home
                   </a>
                 </li>
 
                 <li>
-                  <a
-                    href="/properties"
-                    className={s.footerLink}
-                  >
+                  <a href="/properties" className={s.footerLink}>
                     Property
                   </a>
                 </li>
 
                 <li>
-                  <a
-                    href="/wishlist"
-                    className={s.footerLink}
-                  >
+                  <a href="/wishlist" className={s.footerLink}>
                     Wishlist
                   </a>
                 </li>
 
                 <li>
-                  <a
-                    href="/contact"
-                    className={s.footerLink}
-                  >
+                  <a href="/contact" className={s.footerLink}>
                     Contact
                   </a>
                 </li>
-
               </ul>
             </div>
 
             {/* Contact Info */}
             <div>
-
-              <h4 className={s.footerHeading}>
-                Support
-              </h4>
+              <h4 className={s.footerHeading}>Support</h4>
 
               <ul className={s.footerLinks}>
-
                 <li className={s.contactInfo}>
                   <HiMail className="text-primary text-xl" />
                   contact@reestate.com
@@ -733,85 +1088,59 @@ const LandingPage = () => {
                   />
                   Business Hub, Kathmandu
                 </li>
-
               </ul>
-
             </div>
 
             {/* Newsletter */}
             <div>
-
-              <h4 className={s.footerHeading}>
-                Newsletter
-              </h4>
+              <h4 className={s.footerHeading}>Newsletter</h4>
 
               <p className={s.newsletterDesc}>
-                Suscribe to get latest listings and market
+                Subscribe to get the latest listings and market
                 insights directly in your inbox.
               </p>
 
               <div className={s.newsletterInputWrapper}>
-
                 <input
                   type="email"
                   placeholder="Enter your Email"
                   className={s.newsletterInput}
                 />
 
-                <button
-                  className={s.newsletterButton}
-                >
+                <button className={s.newsletterButton}>
                   Join
                 </button>
-
               </div>
-
             </div>
-
           </div>
 
           {/* Bottom Bar */}
           <div className={s.bottomBar}>
-
             <div className={s.bottomBarFlex}>
-
               <p>
-                &copy;{new Date().getFullYear()}
-                RealEstate. All rights reserved.
+                &copy;{new Date().getFullYear()} RealEstate.
+                All rights reserved.
               </p>
 
               <div className={s.footerLegalLinks}>
-
-                <a
-                  href="#"
-                  className={s.footerLink}
-                >
+                <a href="#" className={s.footerLink}>
                   Privacy Policy
                 </a>
 
-                <a
-                  href="#"
-                  className={s.footerLink}
-                >
+                <a href="#" className={s.footerLink}>
                   Terms of Service
                 </a>
 
-                <a
-                  href="#"
-                  className={s.footerLink}
-                >
-                  Cookies settings
+                <a href="#" className={s.footerLink}>
+                  Cookie settings
                 </a>
-
               </div>
-
             </div>
 
             <div className={s.designCredit}>
-
               <img
                 src={logo}
-                alt="logo"
+                alt="Logo"
                 className={s.designLogo}
               />
 
@@ -827,17 +1156,12 @@ const LandingPage = () => {
               >
                 Umanga Project Demo
               </a>
-
             </div>
-
           </div>
-
         </div>
       </footer>
-
     </div>
   );
 };
 
 export default LandingPage;
-

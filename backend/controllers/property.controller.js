@@ -1,17 +1,42 @@
+
 import Property from "../models/property.model.js";
 import Inquiry from "../models/inquiry.model.js";
 import jwt from "jsonwebtoken";
 import { uploadToCloudinary } from "../utils/uploadToCloudinary.js";
 import cloudinary from "../config/cloudinary.js";
 
+// Escape user-supplied strings before using them in regular expressions.
+const escapeRegex = (value = "") =>
+  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Check whether a property has been approved by admin.
+const approvedPropertyFilter = {
+  isVerified: true,
+  verificationStatus: "approved",
+};
+
+// Publicly visible property statuses.
+const publicPropertyStatuses = ["sale", "booked", "sold"];
+
 // Add a property
 export const addProperty = async (req, res) => {
   try {
-    let imageUrls = [];
+    if (req.user.role !== "seller") {
+      return res.status(403).json({
+        success: false,
+        message: "Only sellers can add properties.",
+      });
+    }
+
+    const imageUrls = [];
 
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
-        const result = await uploadToCloudinary(file.buffer, "properties");
+        const result = await uploadToCloudinary(
+          file.buffer,
+          "properties"
+        );
+
         imageUrls.push(result.secure_url);
       }
     }
@@ -20,24 +45,45 @@ export const addProperty = async (req, res) => {
       title: req.body.title,
       description: req.body.description,
       price: Number(req.body.price),
+      district: req.body.district,
       city: req.body.city,
       area: req.body.area,
       pincode: req.body.pincode,
       propertyType: req.body.propertyType,
-      bhk: req.body.bhk ? String(req.body.bhk) : undefined,
-      bathrooms: req.body.bathrooms ? Number(req.body.bathrooms) : undefined,
-      areaSize: req.body.areaSize ? Number(req.body.areaSize) : undefined,
+
+      bhk: req.body.bhk
+        ? String(req.body.bhk)
+        : undefined,
+
+      bathrooms: req.body.bathrooms
+        ? Number(req.body.bathrooms)
+        : undefined,
+
+      areaSize: req.body.areaSize
+        ? Number(req.body.areaSize)
+        : undefined,
+
       furnishing: req.body.furnishing,
-      status: req.body.status,
+
+      status: "sale",
+
       images: imageUrls,
       seller: req.user._id,
+
+      // Admin verification fields.
+      isVerified: false,
+      verificationStatus: "pending",
+      verifiedBy: null,
+      verifiedAt: null,
+      rejectionReason: "",
+
       amenities: req.body.amenities
         ? Array.isArray(req.body.amenities)
           ? req.body.amenities
           : (() => {
               try {
                 return JSON.parse(req.body.amenities);
-              } catch (e) {
+              } catch {
                 return req.body.amenities.split(",");
               }
             })()
@@ -46,6 +92,8 @@ export const addProperty = async (req, res) => {
 
     return res.status(201).json({
       success: true,
+      message:
+        "Property submitted successfully. Waiting for admin verification.",
       property,
     });
   } catch (error) {
@@ -53,23 +101,27 @@ export const addProperty = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: error.message || "Internal server error while adding property",
+      message:
+        error.message || "Internal server error while adding property",
     });
   }
 };
 
-// to get my property
+// Get my properties
 export const getMyProperties = async (req, res) => {
   try {
     const properties = await Property.find({
       seller: req.user._id,
-    });
+    }).sort({ createdAt: -1 });
 
     return res.json({
       success: true,
+      count: properties.length,
       properties,
     });
   } catch (error) {
+    console.error("GET_MY_PROPERTIES_ERROR:", error);
+
     return res.status(500).json({
       success: false,
       message: error.message,
@@ -77,7 +129,7 @@ export const getMyProperties = async (req, res) => {
   }
 };
 
-// update a property
+// Update a property
 export const updateProperty = async (req, res) => {
   try {
     const property = await Property.findById(req.params.id);
@@ -96,10 +148,19 @@ export const updateProperty = async (req, res) => {
       });
     }
 
+    // Do not allow editing properties involved in bookings.
+    if (property.status === "booked" || property.status === "sold") {
+      return res.status(403).json({
+        success: false,
+        message: "Booked or sold properties cannot be edited.",
+      });
+    }
+
     const fields = [
       "title",
       "description",
       "price",
+      "district",
       "city",
       "area",
       "pincode",
@@ -108,16 +169,18 @@ export const updateProperty = async (req, res) => {
       "bathrooms",
       "areaSize",
       "furnishing",
-      "status",
       "amenities",
     ];
 
     fields.forEach((field) => {
       if (req.body[field] !== undefined) {
-        if (field === "amenities" && typeof req.body[field] === "string") {
+        if (
+          field === "amenities" &&
+          typeof req.body[field] === "string"
+        ) {
           try {
             property[field] = JSON.parse(req.body[field]);
-          } catch (e) {
+          } catch {
             property[field] = req.body[field].split(",");
           }
         } else {
@@ -126,36 +189,56 @@ export const updateProperty = async (req, res) => {
       }
     });
 
-    // for image handling
-    if (req.body.existingImages) {
+    // Preserve existing images selected by the user.
+    if (req.body.existingImages !== undefined) {
       try {
         const existing = JSON.parse(req.body.existingImages);
-        property.images = Array.isArray(existing) ? existing : property.images;
-      } catch (e) {
-        console.error("Failed to parse existingImages:", e);
+
+        if (Array.isArray(existing)) {
+          property.images = existing;
+        }
+      } catch (error) {
+        console.error("Failed to parse existingImages:", error);
       }
     }
 
-    // upload new images if they exist
+    // Upload new images.
     if (req.files && req.files.length > 0) {
       const newImages = [];
 
       for (const file of req.files) {
-        const result = await uploadToCloudinary(file.buffer, "properties");
+        const result = await uploadToCloudinary(
+          file.buffer,
+          "properties"
+        );
+
         newImages.push(result.secure_url);
       }
 
-      property.images = [...property.images, ...newImages];
+      property.images = [
+        ...(property.images || []),
+        ...newImages,
+      ];
     }
+
+    // Any seller edit requires admin verification again.
+    property.isVerified = false;
+    property.verificationStatus = "pending";
+    property.verifiedBy = null;
+    property.verifiedAt = null;
+    property.rejectionReason = "";
 
     await property.save();
 
     return res.json({
       success: true,
-      message: "Property updated",
+      message:
+        "Property updated successfully. It is waiting for admin verification again.",
       property,
     });
   } catch (error) {
+    console.error("UPDATE_PROPERTY_ERROR:", error);
+
     return res.status(500).json({
       success: false,
       message: error.message,
@@ -163,7 +246,7 @@ export const updateProperty = async (req, res) => {
   }
 };
 
-// to delete a property
+// Delete a property
 export const deleteProperty = async (req, res) => {
   try {
     const property = await Property.findById(req.params.id);
@@ -171,31 +254,53 @@ export const deleteProperty = async (req, res) => {
     if (!property) {
       return res.status(404).json({
         success: false,
-        message: "property not found",
+        message: "Property not found",
       });
     }
 
-    // check ownership
     if (property.seller.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
-        message: "Not Authorized",
+        message: "Not authorized",
       });
     }
 
-    // delete images from Cloudinary
-    for (const imageUrl of property.images) {
-      const publicId = imageUrl.split("/").pop().split(".")[0];
-      await cloudinary.uploader.destroy("properties/" + publicId);
+    // Protect properties involved in bookings.
+    if (property.status === "booked" || property.status === "sold") {
+      return res.status(403).json({
+        success: false,
+        message: "Booked or sold properties cannot be deleted.",
+      });
+    }
+
+    // Delete images from Cloudinary.
+    for (const imageUrl of property.images || []) {
+      try {
+        const publicId = imageUrl
+          .split("/")
+          .pop()
+          .split(".")[0];
+
+        await cloudinary.uploader.destroy(
+          "properties/" + publicId
+        );
+      } catch (imageError) {
+        console.error(
+          "CLOUDINARY_IMAGE_DELETE_ERROR:",
+          imageError
+        );
+      }
     }
 
     await property.deleteOne();
 
     return res.json({
       success: true,
-      message: "property deleted successfully",
+      message: "Property deleted successfully",
     });
   } catch (error) {
+    console.error("DELETE_PROPERTY_ERROR:", error);
+
     return res.status(500).json({
       success: false,
       message: error.message,
@@ -203,35 +308,18 @@ export const deleteProperty = async (req, res) => {
   }
 };
 
-// update property status
+// Update property status
+// Booking controller is responsible for sale -> booked -> sold.
 export const updatePropertyStatus = async (req, res) => {
   try {
-    const property = await Property.findById(req.params.id);
-
-    if (!property) {
-      return res.status(404).json({
-        success: false,
-        message: "property not found",
-      });
-    }
-
-    // check ownership
-    if (property.seller.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        success: false,
-        message: "Not Authorized",
-      });
-    }
-
-    property.status = req.body.status;
-    await property.save();
-
-    return res.json({
-      success: true,
-      message: "property status updated successfully!",
-      property,
+    return res.status(403).json({
+      success: false,
+      message:
+        "Property booking status can only be changed through the booking process.",
     });
   } catch (error) {
+    console.error("UPDATE_PROPERTY_STATUS_ERROR:", error);
+
     return res.status(500).json({
       success: false,
       message: error.message,
@@ -239,17 +327,18 @@ export const updatePropertyStatus = async (req, res) => {
   }
 };
 
-// to get all property
+// Get all approved properties with filters.
+// Available, booked, and sold properties are visible to buyers.
 export const getAllProperties = async (req, res) => {
   try {
     const {
+      district,
       city,
       area,
       pincode,
       propertyType,
       bhk,
       furnishing,
-      status,
       minPrice,
       maxPrice,
       amenities,
@@ -257,38 +346,62 @@ export const getAllProperties = async (req, res) => {
       seller,
     } = req.query;
 
-    let query = {
-      status: "sale",
+    const query = {
+      ...approvedPropertyFilter,
+      status: { $in: publicPropertyStatuses },
     };
 
-    if (seller) query.seller = seller;
-    if (city) query.city = new RegExp(city, "i");
-    if (area) query.area = new RegExp(area, "i");
-    if (pincode) query.pincode = pincode;
+    if (seller) {
+      query.seller = seller;
+    }
+
+    if (district) {
+      query.district = new RegExp(
+        `^${escapeRegex(district)}$`,
+        "i"
+      );
+    }
+
+    if (city) {
+      query.city = new RegExp(
+        escapeRegex(city),
+        "i"
+      );
+    }
+
+    if (area) {
+      query.area = new RegExp(
+        escapeRegex(area),
+        "i"
+      );
+    }
+
+    if (pincode) {
+      query.pincode = pincode;
+    }
 
     if (propertyType) {
-      query.propertyType = { $in: propertyType.toLowerCase().split(",") };
-    }
-
-    if (bhk) {
-      if (bhk === "5+") {
-        query.bhk = { $gte: "5" };
-      } else {
-        query.bhk = bhk;
-      }
-    }
-
-    if (furnishing) {
-      const furnishingArray = furnishing.split(",");
-
-      query.furnishing = {
-        $in: furnishingArray.map(
-          (f) => new RegExp(`^${f.trim()}$`, "i")
-        ),
+      query.propertyType = {
+        $in: propertyType.toLowerCase().split(","),
       };
     }
 
-    if (status) query.status = status;
+    if (bhk) {
+      query.bhk =
+        bhk === "5+" ? { $gte: "5" } : bhk;
+    }
+
+    if (furnishing) {
+      query.furnishing = {
+        $in: furnishing.split(",").map(
+          (value) =>
+            new RegExp(
+              `^${escapeRegex(value.trim())}$`,
+              "i"
+            )
+        ),
+      };
+    }
 
     if (minPrice || maxPrice) {
       query.price = {};
@@ -308,15 +421,25 @@ export const getAllProperties = async (req, res) => {
 
     if (amenities) {
       query.amenities = {
-        $in: amenities.split(",").map((a) => a.trim()),
+        $in: amenities.split(",").map(
+          (value) => value.trim()
+        ),
       };
     }
 
     let sortOption = { createdAt: -1 };
 
-    if (sort === "priceLow") sortOption = { price: 1 };
-    if (sort === "priceHigh") sortOption = { price: -1 };
-    if (sort === "latest") sortOption = { createdAt: -1 };
+    if (sort === "priceLow") {
+      sortOption = { price: 1 };
+    }
+
+    if (sort === "priceHigh") {
+      sortOption = { price: -1 };
+    }
+
+    if (sort === "latest") {
+      sortOption = { createdAt: -1 };
+    }
 
     const properties = await Property.find(query)
       .populate("seller", "name phone profilePic")
@@ -328,18 +451,97 @@ export const getAllProperties = async (req, res) => {
       properties,
     });
   } catch (error) {
+    console.error("GET_ALL_PROPERTIES_ERROR:", error);
+
     return res.status(500).json({
       success: false,
-      message: "Internal server error while fetching properties",
+      message:
+        "Internal server error while fetching properties",
       error: error.message,
     });
   }
 };
 
-// to get property details
+// Get districts and areas for location filters.
+// Include locations from available, booked, and sold properties.
+export const getPropertyLocations = async (req, res) => {
+  try {
+    const selectedDistrict = String(
+      req.query.district || ""
+    ).trim();
+
+    const allDistricts = await Property.distinct(
+      "district",
+      {
+        ...approvedPropertyFilter,
+        status: { $in: publicPropertyStatuses },
+      }
+    );
+
+    const districts = [
+      ...new Set(
+        allDistricts
+          .filter(
+            (value) =>
+              typeof value === "string" &&
+              value.trim().length > 0
+          )
+          .map((value) => value.trim())
+      ),
+    ].sort((a, b) => a.localeCompare(b));
+
+    const areaFilter = {
+      ...approvedPropertyFilter,
+      status: { $in: publicPropertyStatuses },
+      area: { $nin: [null, ""] },
+    };
+
+    if (selectedDistrict) {
+      areaFilter.district = new RegExp(
+        `^${escapeRegex(selectedDistrict)}$`,
+        "i"
+      );
+    }
+
+    const allAreas = await Property.distinct(
+      "area",
+      areaFilter
+    );
+
+    const areas = [
+      ...new Set(
+        allAreas
+          .filter(
+            (value) =>
+              typeof value === "string" &&
+              value.trim().length > 0
+          )
+          .map((value) => value.trim())
+      ),
+    ].sort((a, b) => a.localeCompare(b));
+
+    return res.status(200).json({
+      success: true,
+      districts,
+      areas,
+    });
+  } catch (error) {
+    console.error("GET_PROPERTY_LOCATIONS_ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch property locations",
+      error: error.message,
+    });
+  }
+};
+
+// Get property details
 export const getPropertyDetails = async (req, res) => {
   try {
-    const property = await Property.findById(req.params.id).populate(
+    const property = await Property.findById(
+      req.params.id
+    ).populate(
       "seller",
       "name email phone profilePic"
     );
@@ -347,62 +549,120 @@ export const getPropertyDetails = async (req, res) => {
     if (!property) {
       return res.status(404).json({
         success: false,
-        message: "property not found",
+        message: "Property not found",
       });
     }
 
-    // unique view tracking ID
     let visitorId = req.ip;
+    let isSellerChecking = false;
+    let isAdminChecking = false;
+
     const authHeader = req.headers.authorization;
 
+    // Identify logged-in user from JWT.
     if (authHeader && authHeader.startsWith("Bearer ")) {
       try {
         const token = authHeader.split(" ")[1];
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        visitorId = decoded.id || req.ip;
-      } catch (error) {
-        // Ignore invalid token and use IP address for view tracking.
+        const decoded = jwt.verify(
+          token,
+          process.env.JWT_SECRET
+        );
+
+        const tokenUserId =
+          decoded.id ||
+          decoded._id ||
+          decoded.userId;
+
+        if (tokenUserId) {
+          visitorId = String(tokenUserId);
+
+          isSellerChecking =
+            property.seller &&
+            String(property.seller._id) === visitorId;
+        }
+
+        isAdminChecking = decoded.role === "admin";
+
+      } catch (authError) {
+        console.log(
+          "PROPERTY_DETAILS_AUTH_ERROR:",
+          authError.message
+        );
       }
     }
 
-    const isSellerChecking = property.seller &&
-      String(visitorId) === property.seller._id.toString();
+    // Hide pending and rejected properties from buyers and public visitors.
+    if (
+      (
+        property.isVerified !== true ||
+        property.verificationStatus !== "approved"
+      ) &&
+      !isSellerChecking &&
+      !isAdminChecking
+    ) {
+      return res.status(404).json({
+        success: false,
+        message: "Property not found or not yet approved.",
+      });
+    }
 
+    // Count views only from visitors, not owner or admin.
     if (!property.viewedBy) {
       property.viewedBy = [];
     }
 
-    if (!isSellerChecking && !property.viewedBy.map(String).includes(String(visitorId))) {
+    const alreadyViewed = property.viewedBy
+      .map(String)
+      .includes(String(visitorId));
+
+    if (
+      !isSellerChecking &&
+      !isAdminChecking &&
+      !alreadyViewed
+    ) {
       property.views = (property.views || 0) + 1;
+
       property.viewedBy.push(String(visitorId));
+
       await property.save();
     }
 
+    // Similar properties remain available properties only.
     const similarProperties = await Property.find({
       _id: { $ne: property._id },
       city: property.city,
       propertyType: property.propertyType,
-      status: property.status,
+      status: "sale",
+      ...approvedPropertyFilter,
     })
       .limit(4)
-      .select("title price images city area propertyType bhk areaSize status");
+      .select(
+        "title price images city area propertyType bhk areaSize status"
+      );
 
     return res.json({
       success: true,
       property,
       similarProperties,
     });
+
   } catch (error) {
+    console.error(
+      "GET_PROPERTY_DETAILS_ERROR:",
+      error
+    );
+
     return res.status(500).json({
       success: false,
-      message: "Internal server error while fetching properties",
+      message:
+        "Internal server error while fetching properties",
       error: error.message,
     });
   }
 };
 
-// seller dashboard
+// Seller dashboard
 export const getSellerDashboard = async (req, res) => {
   try {
     const sellerId = req.user._id;
@@ -414,6 +674,7 @@ export const getSellerDashboard = async (req, res) => {
     const activeListings = await Property.countDocuments({
       seller: sellerId,
       status: "sale",
+      ...approvedPropertyFilter,
     });
 
     const soldProperties = await Property.countDocuments({
@@ -421,18 +682,40 @@ export const getSellerDashboard = async (req, res) => {
       status: "sold",
     });
 
+    const pendingProperties = await Property.countDocuments({
+      seller: sellerId,
+      verificationStatus: "pending",
+    });
+
+    const rejectedProperties = await Property.countDocuments({
+      seller: sellerId,
+      verificationStatus: "rejected",
+    });
+
     const totalInquiries = await Inquiry.countDocuments({
       seller: sellerId,
     });
 
-    // calculate total views for all properties
     const viewsData = await Property.aggregate([
-      { $match: { seller: sellerId } },
-      { $group: { _id: null, totalViews: { $sum: "$views" } } },
+      {
+        $match: {
+          seller: sellerId,
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalViews: {
+            $sum: "$views",
+          },
+        },
+      },
     ]);
 
     const totalViews =
-      viewsData.length > 0 ? viewsData[0].totalViews : 0;
+      viewsData.length > 0
+        ? viewsData[0].totalViews
+        : 0;
 
     return res.json({
       success: true,
@@ -440,40 +723,65 @@ export const getSellerDashboard = async (req, res) => {
         totalProperties,
         activeListings,
         soldProperties,
+        pendingProperties,
+        rejectedProperties,
         totalInquiries,
         totalViews,
       },
     });
   } catch (error) {
+    console.error("GET_SELLER_DASHBOARD_ERROR:", error);
+
     return res.status(500).json({
       success: false,
-      message: "Internal server error while fetching properties",
+      message:
+        "Internal server error while fetching seller dashboard",
       error: error.message,
     });
   }
 };
 
-// get property count by type
+// Get approved property counts by type.
+// Counts include available, booked, and sold properties.
 export const getPropertyCounts = async (req, res) => {
   try {
     const counts = await Property.aggregate([
-      { $match: { status: "sale" } },
-      { $group: { _id: "$propertyType", count: { $sum: 1 } } },
+      {
+        $match: {
+          ...approvedPropertyFilter,
+          status: { $in: publicPropertyStatuses },
+        },
+      },
+      {
+        $group: {
+          _id: "$propertyType",
+          count: { $sum: 1 },
+        },
+      },
     ]);
 
-    const formattedCounts = counts.reduce((acc, curr) => {
-      acc[curr._id] = curr.count;
-      return acc;
-    }, {});
+    const formattedCounts = counts.reduce(
+      (acc, curr) => {
+        if (curr._id) {
+          acc[curr._id] = curr.count;
+        }
+
+        return acc;
+      },
+      {}
+    );
 
     return res.json({
       success: true,
       counts: formattedCounts,
     });
   } catch (error) {
+    console.error("GET_PROPERTY_COUNTS_ERROR:", error);
+
     return res.status(500).json({
       success: false,
-      message: "Internal server error while fetching counts",
+      message:
+        "Internal server error while fetching counts",
       error: error.message,
     });
   }

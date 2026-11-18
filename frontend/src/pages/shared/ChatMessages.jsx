@@ -1,120 +1,227 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { chatMessagesStyles as s } from '../../assets/dummyStyles';
-import { useAuth } from '../../context/AuthContext';
-import { useChat } from '../../context/ChatContext';
-import { useLocation } from 'react-router-dom';
-import axios from 'axios';
-import API_URL from '../../config';
-import Navbar from '../../components/common/Navbar';
+
+import React, { useEffect, useState, useRef } from "react";
+import { chatMessagesStyles as s } from "../../assets/dummyStyles";
+import { useAuth } from "../../context/AuthContext";
+import { useChat } from "../../context/ChatContext";
+import { useLocation } from "react-router-dom";
+import axios from "axios";
+import API_URL from "../../config";
+import Navbar from "../../components/common/Navbar";
+
 import {
   HiChevronLeft,
   HiOutlineChatAlt2,
   HiOutlineTrash,
   HiPaperAirplane,
-} from 'react-icons/hi';
+} from "react-icons/hi";
 
 const ChatMessages = () => {
   const { user, token } = useAuth();
   const location = useLocation();
-  const { socket, activeChat, setActiveChat, joinChat, sendMessage } = useChat();
+
+  const {
+    socket,
+    activeChat,
+    setActiveChat,
+    joinChat,
+    sendMessage,
+  } = useChat();
 
   const [conversations, setConversations] = useState([]);
   const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
+  const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+
   const messagesEndRef = useRef(null);
 
-  // to scroll to bottom
+  // Scroll to the latest message
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
   };
 
-  // to fetch the conversation (btw buyer and seller)
+  // Fetch conversations
   useEffect(() => {
+    let cancelled = false;
+
     const fetchConversations = async () => {
       try {
         const res = await axios.get(`${API_URL}/api/chat/user`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         });
 
+        if (cancelled) return;
+
         const fetchedConversations = res.data || [];
+
         setConversations(fetchedConversations);
 
         if (location.state?.chat) {
           const existingChat = fetchedConversations.find(
-            (c) => c._id === location.state.chat._id
+            (chat) => chat._id === location.state.chat._id
           );
 
-          if (existingChat) {
-            setActiveChat(existingChat);
-          } else {
-            setActiveChat(location.state.chat);
-          }
+          setActiveChat(existingChat || location.state.chat);
         }
-
-        setLoading(false);
       } catch (err) {
-        console.error('Error fetching conversation:', err);
-        setLoading(false);
+        console.error("Error fetching conversations:", err);
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
-    fetchConversations();
-  }, [user, location.state, token, setActiveChat]);
+    if (token) {
+      fetchConversations();
+    } else {
+      setLoading(false);
+    }
 
-  // to fetch message
+    return () => {
+      cancelled = true;
+    };
+  }, [token, user?._id, location.state, setActiveChat]);
+
+  // Fetch messages when active conversation changes
   useEffect(() => {
-    if (activeChat) {
-      const fetchMessage = async () => {
-        try {
-          const res = await axios.get(`${API_URL}/api/chat/${activeChat._id}`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
+    if (!activeChat?._id) {
+      setMessages([]);
+      return;
+    }
 
+    let cancelled = false;
+
+    setMessages([]);
+
+    const fetchMessages = async () => {
+      try {
+        const res = await axios.get(
+          `${API_URL}/api/chat/${activeChat._id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!cancelled) {
           setMessages(res.data.messages || []);
-          joinChat(activeChat._id);
-          scrollToBottom();
-        } catch (err) {
-          console.error('Error fetching messages:', err);
         }
-      };
+      } catch (err) {
+        console.error("Error fetching messages:", err);
+      }
+    };
 
-      fetchMessage();
-    }
-  }, [activeChat, token, joinChat]);
+    fetchMessages();
 
-  // updating the chat when new message is received.
+    return () => {
+      cancelled = true;
+    };
+  }, [activeChat?._id, token]);
+
+  // Join the active chat after the socket connects
   useEffect(() => {
-    if (socket) {
-      socket.on('receiveMessage', (data) => {
-        if (activeChat && data.chatId === activeChat._id) {
-          setMessages((prev) => [...prev, data]);
-        }
-      });
+    if (!socket || !activeChat?._id) return;
+
+    const handleConnect = () => {
+      joinChat(activeChat._id);
+    };
+
+    socket.on("connect", handleConnect);
+
+    if (socket.connected) {
+      handleConnect();
     }
 
-    return () => socket?.off('receiveMessage');
-  }, [socket, activeChat]);
+    return () => {
+      socket.off("connect", handleConnect);
+    };
+  }, [socket, activeChat?._id, joinChat]);
 
+  // Receive messages from the other participant
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleReceiveMessage = (data) => {
+      if (
+        data.chatId?.toString() !== activeChat?._id?.toString()
+      ) {
+        return;
+      }
+
+      setMessages((prev) => {
+        const alreadyExists = prev.some(
+          (message) => message._id === data._id
+        );
+
+        if (alreadyExists) return prev;
+
+        return [...prev, data];
+      });
+
+      // Update conversation preview
+      setConversations((prev) =>
+        prev.map((chat) =>
+          chat._id === data.chatId
+            ? {
+                ...chat,
+                messages: [...(chat.messages || []), data],
+                updatedAt: new Date().toISOString(),
+              }
+            : chat
+        )
+      );
+    };
+
+    socket.on("receiveMessage", handleReceiveMessage);
+
+    return () => {
+      socket.off("receiveMessage", handleReceiveMessage);
+    };
+  }, [socket, activeChat?._id]);
+
+  // Listen for chat errors
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleChatError = (error) => {
+      console.error("Chat error:", error.message);
+    };
+
+    socket.on("chatError", handleChatError);
+
+    return () => {
+      socket.off("chatError", handleChatError);
+    };
+  }, [socket]);
+
+  // Scroll when messages change
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
   useEffect(() => {
     if (activeChat) {
-      const timer = setTimeout(() => scrollToBottom(), 100);
+      const timer = setTimeout(scrollToBottom, 100);
+
       return () => clearTimeout(timer);
     }
   }, [activeChat]);
 
-  // to send messages
+  // Send a message
   const handleSendMessage = async (e) => {
     e.preventDefault();
 
-    if (!newMessage.trim() || !activeChat) return;
+    const textToSend = newMessage.trim();
 
-    const textToSend = newMessage;
-    setNewMessage('');
+    if (!textToSend || !activeChat || sending) return;
+
+    setSending(true);
 
     try {
       const res = await axios.post(
@@ -124,67 +231,137 @@ const ChatMessages = () => {
           text: textToSend,
         },
         {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         }
       );
 
-      if (res.data.newMessage) {
+      const savedMessage = res.data.newMessage;
+
+      if (savedMessage) {
+        // Add the saved message to the sender's own message list
+        setMessages((prev) => {
+          const alreadyExists = prev.some(
+            (message) => message._id === savedMessage._id
+          );
+
+          if (alreadyExists) return prev;
+
+          return [...prev, savedMessage];
+        });
+
+        // Update the conversation preview
+        setConversations((prev) =>
+          prev.map((chat) =>
+            chat._id === activeChat._id
+              ? {
+                  ...chat,
+                  messages: [
+                    ...(chat.messages || []),
+                    savedMessage,
+                  ],
+                  updatedAt: new Date().toISOString(),
+                }
+              : chat
+          )
+        );
+
+        // Notify the other participant through Socket.IO
         sendMessage(
           activeChat._id,
-          textToSend,
-          res.data.newMessage._id,
-          res.data.newMessage.createdAt
+          savedMessage.text,
+          savedMessage._id,
+          savedMessage.createdAt,
+          savedMessage.image
         );
-      }
 
-      scrollToBottom();
+        setNewMessage("");
+      }
     } catch (err) {
-      console.error('Error sending messages:', err);
+      console.error("Error sending message:", err);
+
+      alert(
+        err.response?.data?.message ||
+        "Unable to send message. Please try again."
+      );
+    } finally {
+      setSending(false);
     }
   };
 
-  // to delete a chat
+  // Delete an entire conversation
   const handleDeleteChat = async (e, chatId) => {
     e.stopPropagation();
 
-    if (!window.confirm('Are you sure you want to delete this conversation?')) {
+    if (!window.confirm("Are you sure you want to delete this conversation?")) {
       return;
     }
 
     try {
       await axios.delete(`${API_URL}/api/chat/${chatId}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
 
-      setConversations((prev) => prev.filter((c) => c._id !== chatId));
+      setConversations((prev) =>
+        prev.filter((chat) => chat._id !== chatId)
+      );
 
       if (activeChat?._id === chatId) {
         setActiveChat(null);
+        setMessages([]);
       }
     } catch (err) {
-      console.error('Error deleting chat:', err);
+      console.error("Error deleting chat:", err);
+
+      alert(
+        err.response?.data?.message ||
+        "Unable to delete conversation."
+      );
     }
   };
 
-  // to delete a message from chat
+  // Delete a specific message
   const handleDeleteMessage = async (chatId, messageId) => {
-    if (!window.confirm('Delete this message')) return;
+    if (!window.confirm("Delete this message?")) return;
 
     try {
       const res = await axios.delete(
         `${API_URL}/api/chat/${chatId}/message/${messageId}`,
         {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
         }
       );
 
       setMessages(res.data.chat.messages || []);
+
+      setConversations((prev) =>
+        prev.map((chat) =>
+          chat._id === chatId
+            ? {
+                ...chat,
+                messages: (chat.messages || []).filter(
+                  (message) => message._id !== messageId
+                ),
+              }
+            : chat
+        )
+      );
     } catch (err) {
-      console.error('Error deleting message:', err);
+      console.error("Error deleting message:", err);
+
+      alert(
+        err.response?.data?.message ||
+        "Unable to delete message."
+      );
     }
   };
 
-  // to get the partner
+  // Get the other participant
   const getChatPartner = (chat) => {
     if (!user || !chat) return null;
 
@@ -204,15 +381,20 @@ const ChatMessages = () => {
   return (
     <div
       className={`${s.chatContainer} ${
-        user?.role === 'seller'
+        user?.role === "seller"
           ? s.chatContainerSeller
           : s.chatContainerNonSeller
       }`}
     >
-      {user?.role !== 'seller' && <Navbar />}
+      {user?.role !== "seller" && <Navbar />}
 
       <div className={s.chatWrapper}>
-        <div className={`${s.sidebar} ${activeChat ? s.sidebarHidden : ''}`}>
+        {/* Conversation sidebar */}
+        <div
+          className={`${s.sidebar} ${
+            activeChat ? s.sidebarHidden : ""
+          }`}
+        >
           <div className={s.sidebarHeader}>
             <h2 className={s.sidebarTitle}>Message</h2>
           </div>
@@ -230,7 +412,7 @@ const ChatMessages = () => {
                   className={`${s.conversationItem} ${
                     activeChat?._id === chat._id
                       ? s.conversationItemActive
-                      : ''
+                      : ""
                   }`}
                   onClick={() => setActiveChat(chat)}
                 >
@@ -252,8 +434,8 @@ const ChatMessages = () => {
                     </div>
 
                     <div className={s.conversationPreview}>
-                      {(chat.messages ?? []).at(-1)?.text ||
-                        'Started a conversation'}
+                      {(chat.messages || []).at(-1)?.text ||
+                        "Started a conversation"}
                     </div>
                   </div>
 
@@ -270,7 +452,7 @@ const ChatMessages = () => {
           </div>
         </div>
 
-        {/* main chat area */}
+        {/* Main chat area */}
         <div className={s.chatArea}>
           {activeChat ? (
             <>
@@ -306,7 +488,8 @@ const ChatMessages = () => {
                   <div
                     key={msg._id || idx}
                     className={`${s.messageBubble} ${
-                      (msg.sender?._id || msg.sender) === user?._id
+                      (msg.sender?._id || msg.sender)?.toString() ===
+                      user?._id?.toString()
                         ? s.messageOwn
                         : s.messageOther
                     }`}
@@ -316,19 +499,27 @@ const ChatMessages = () => {
                         <div className={s.messageImageWrapper}>
                           <img
                             src={msg.image}
-                            alt="Property Reference"
+                            alt="Message attachment"
                             className={s.messageImage}
                           />
                         </div>
                       )}
 
-                      <div className={s.messageText}>{msg.text}</div>
+                      {msg.text && (
+                        <div className={s.messageText}>
+                          {msg.text}
+                        </div>
+                      )}
 
-                      {(msg.sender?._id || msg.sender) === user?._id && (
+                      {(msg.sender?._id || msg.sender)?.toString() ===
+                        user?._id?.toString() && (
                         <button
                           className={s.deleteMessageButton}
                           onClick={() =>
-                            handleDeleteMessage(activeChat._id, msg._id)
+                            handleDeleteMessage(
+                              activeChat._id,
+                              msg._id
+                            )
                           }
                           title="Delete Message"
                         >
@@ -339,8 +530,8 @@ const ChatMessages = () => {
 
                     <span className={s.messageTime}>
                       {new Date(msg.createdAt).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
+                        hour: "2-digit",
+                        minute: "2-digit",
                       })}
                     </span>
                   </div>
@@ -349,16 +540,24 @@ const ChatMessages = () => {
                 <div ref={messagesEndRef} />
               </div>
 
-              <form className={s.messageForm} onSubmit={handleSendMessage}>
+              <form
+                className={s.messageForm}
+                onSubmit={handleSendMessage}
+              >
                 <input
                   type="text"
                   className={s.messageInput}
                   placeholder="Type a message..."
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
+                  disabled={sending}
                 />
 
-                <button type="submit" className={s.sendButton}>
+                <button
+                  type="submit"
+                  className={s.sendButton}
+                  disabled={sending || !newMessage.trim()}
+                >
                   <HiPaperAirplane className={s.sendIcon} />
                 </button>
               </form>

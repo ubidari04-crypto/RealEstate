@@ -7,6 +7,22 @@ import axios from 'axios';
 import API_URL from '../../config';
 import { HiUpload } from 'react-icons/hi';
 
+const nepalDistricts = [
+  "Achham", "Arghakhanchi", "Baglung", "Baitadi", "Bajhang", "Bajura",
+  "Banke", "Bara", "Bardiya", "Bhaktapur", "Bhojpur", "Chitwan",
+  "Dadeldhura", "Dailekh", "Dang", "Darchula", "Dhading", "Dhankuta",
+  "Dhanusha", "Dolakha", "Dolpa", "Doti", "Eastern Rukum", "Gorkha",
+  "Gulmi", "Humla", "Ilam", "Jajarkot", "Jhapa", "Jumla", "Kailali",
+  "Kalikot", "Kanchanpur", "Kapilvastu", "Kaski", "Kathmandu",
+  "Kavrepalanchok", "Khotang", "Lalitpur", "Lamjung", "Mahottari",
+  "Makwanpur", "Manang", "Morang", "Mugu", "Mustang", "Myagdi",
+  "Nawalpur", "Nuwakot", "Okhaldhunga", "Palpa", "Panchthar", "Parasi",
+  "Parbat", "Parsa", "Pyuthan", "Ramechhap", "Rasuwa", "Rautahat",
+  "Rolpa", "Rupandehi", "Salyan", "Sankhuwasabha", "Saptari", "Sarlahi",
+  "Sindhuli", "Sindhupalchok", "Siraha", "Solukhumbu", "Sunsari",
+  "Surkhet", "Syangja", "Tanahun", "Taplejung", "Tehrathum", "Udayapur",
+];
+
 const AddProperty = () => {
     const navigate = useNavigate();
     const { token } = useAuth();
@@ -19,6 +35,7 @@ const AddProperty = () => {
         title: "",
         description: "",
         price: "",
+        district: "",
         city: "",
         area: "",
         pincode: "",
@@ -432,6 +449,22 @@ const AddProperty = () => {
                                         min="1"
                                         required
                                     />
+                                </div>
+
+                                <div>
+                                    <label className={s.labelSmallMargin}>District</label>
+                                    <select
+                                        name="district"
+                                        value={formData.district}
+                                        onChange={handleInputChange}
+                                        className={`${s.input} ${s.select}`}
+                                        required
+                                    >
+                                        <option value="">Select District</option>
+                                        {nepalDistricts.map((district) => (
+                                            <option key={district} value={district}>{district}</option>
+                                        ))}
+                                    </select>
                                 </div>
 
                                 <div className={s.gridTwoCol}>

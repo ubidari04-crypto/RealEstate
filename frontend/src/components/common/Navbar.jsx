@@ -15,46 +15,57 @@ const Navbar = () => {
     // navlinks 
     const navLinks = (
         <>
-        {(!user || user.role !== "buyer") &&(
-            <Link
-             to= "/properties"
-             className={s.navLink}
-              onClick={() => setIsOpen(false)}
-             >
-        Browse properties     
-            </Link>
-        
-        )}
-
         {user && user.role === "buyer" && (
-            <> 
-            <Link to='/' className={s.navLink} onClick={() => setIsOpen(false)}>
-            Home
-            </Link>
-              <Link
-             to= "/properties"
-             className={s.navLink} onClick={() => setIsOpen(false)}
-             >
-            property     
-            </Link>
-            <Link to="/wishlist"
-             className={s.navLink}
-              onClick={() => setIsOpen(false)}
-              >
-                wishlist
-              </Link>
-              <Link to='/chat-messages'  className={s.navLink}
-              onClick={() => setIsOpen(false)}
-              >
-                Messages
-              </Link>
-              <Link to='/contact'  className={s.navLink}
-              onClick={() => setIsOpen(false)}
-              >
-                Contact Us
-              </Link>
-            </>
-        )}
+    <>
+      <Link
+        to="/"
+        className={s.navLink}
+        onClick={() => setIsOpen(false)}
+      >
+        Home
+      </Link>
+
+      <Link
+        to="/properties"
+        className={s.navLink}
+        onClick={() => setIsOpen(false)}
+      >
+        Properties
+      </Link>
+
+      <Link
+        to="/wishlist"
+        className={s.navLink}
+        onClick={() => setIsOpen(false)}
+      >
+        Wishlist
+      </Link>
+
+      <Link
+        to="/buyer/preferences"
+        className={s.navLink}
+        onClick={() => setIsOpen(false)}
+      >
+        My Preferences
+      </Link>
+
+      <Link
+        to="/chat-messages"
+        className={s.navLink}
+        onClick={() => setIsOpen(false)}
+      >
+        Messages
+      </Link>
+
+      <Link
+        to="/contact"
+        className={s.navLink}
+        onClick={() => setIsOpen(false)}
+      >
+        Contact Us
+      </Link>
+    </>
+  )}
 
         {!user && (
             <>

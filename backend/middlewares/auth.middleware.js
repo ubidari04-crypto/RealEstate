@@ -1,60 +1,77 @@
-import jwt from 'jsonwebtoken';
-import User from '../models/user.model.js';
+import jwt from "jsonwebtoken";
+import User from "../models/user.model.js";
 
-//Protect 
-
-export const protect = async (req, res, next ) => {
+// Protect routes
+export const protect = async (req, res, next) => {
     try {
-        let token;
-        if (
-            req.headers.authorization
-            &&
-            req.headers.authorization.startsWith("Bearer")
-            
-        ) {
-            token = req.headers.authorization.split(" ")[1]
-        }
+        const authHeader = req.headers.authorization;
 
-        if(!token){
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
             return res.status(401).json({
                 success: false,
                 message: "Not authorized, token missing"
             });
         }
-        
-        const decoded = jwt.verify(token, process.env.JWT_SECRET)
 
-        req.user = await User.findById(decoded.id).select("-password");
+        const token = authHeader.split(" ")[1];
 
-        if(req.user && req.user.isBlocked){
+        if (!token) {
+            return res.status(401).json({
+                success: false,
+                message: "Not authorized, token missing"
+            });
+        }
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        const user = await User.findById(decoded.id).select("-password");
+
+        if (!user) {
+            return res.status(401).json({
+                success: false,
+                message: "User no longer exists"
+            });
+        }
+
+        if (user.isBlocked) {
             return res.status(403).json({
                 success: false,
-                message: "Your account has been blocked by an admin "
-            })
+                message: "Your account has been blocked by an admin"
+            });
         }
+
+        req.user = user;
+
         next();
 
-    } 
+    } catch (error) {
+        console.error("Authentication error:", error.message);
 
-    catch (error) {
-        res.status(401).json({
+        return res.status(401).json({
             success: false,
-            message: "Token invalid"
+            message: "Token invalid or expired"
         });
-        
     }
 };
 
-//role based authentication
-
-export const authorize =(...roles) => {
+// Role-based authentication
+export const authorize = (...roles) => {
     return (req, res, next) => {
-        if(!roles.includes(req.user.role)){
+
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                message: "Not authenticated"
+            });
+        }
+
+        if (!roles.includes(req.user.role)) {
             return res.status(403).json({
                 success: false,
                 message: "Access Denied. You don't have permission."
             });
         }
+
         next();
-    }
-}
+    };
+};

@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import { editPropertyStyles as s } from "../../assets/dummyStyles";
 import { useAuth } from "../../context/AuthContext";
@@ -14,6 +15,7 @@ const EditProperty = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
+
   const [existingImages, setExistingImages] = useState([]);
   const [newImages, setNewImages] = useState([]);
   const [newImagePreviews, setNewImagePreviews] = useState([]);
@@ -47,7 +49,7 @@ const EditProperty = () => {
     "Garden",
   ];
 
-  // Converts an existing saved image into a usable URL/path string.
+  // Convert an existing saved image into a URL/path string.
   const getExistingImageValue = (image) => {
     if (typeof image === "string") {
       return image;
@@ -63,7 +65,7 @@ const EditProperty = () => {
     );
   };
 
-  // Supports both complete Cloudinary URLs and relative backend upload paths.
+  // Support complete URLs and relative backend upload paths.
   const getExistingImageSrc = (image) => {
     const imageValue = getExistingImageValue(image);
 
@@ -80,12 +82,33 @@ const EditProperty = () => {
     return `${API_URL}${imageValue}`;
   };
 
-  // to fetch the property
+  // Fetch property details.
+  // IMPORTANT: Send the seller's JWT token so the backend
+  // can identify the owner of pending or rejected properties.
   useEffect(() => {
-    const fetchproperty = async () => {
+    let isMounted = true;
+
+    const fetchProperty = async () => {
       try {
-        const res = await axios.get(`${API_URL}/api/property/${id}`);
+        setLoading(true);
+        setError(null);
+
+        const res = await axios.get(
+          `${API_URL}/api/property/${id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
         const p = res.data.property;
+
+        if (!p) {
+          throw new Error("Property details were not returned.");
+        }
+
+        if (!isMounted) return;
 
         setFormData({
           title: p.title || "",
@@ -105,9 +128,7 @@ const EditProperty = () => {
           maintenance: p.maintenance || "",
         });
 
-        // Past image fix:
-        // Supports both "images" and "Images" from the backend.
-        // Converts objects such as { url: "..." } into URL/path strings.
+        // Support both images and Images.
         const savedImages = p.images || p.Images || [];
 
         setExistingImages(
@@ -115,58 +136,122 @@ const EditProperty = () => {
             .map((image) => getExistingImageValue(image))
             .filter(Boolean)
         );
-
-        setLoading(false);
       } catch (err) {
-        setError("Failed to load property details.");
-        setLoading(false);
+        console.error(
+          "FETCH_PROPERTY_ERROR:",
+          err.response?.data || err
+        );
+
+        if (isMounted) {
+          setError(
+            err.response?.data?.message ||
+            err.message ||
+            "Failed to load property details."
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
-    fetchproperty();
-  }, [id]);
+    if (id && token) {
+      fetchProperty();
+    } else if (!token) {
+      setLoading(false);
+      setError("Please log in to edit this property.");
+    }
 
+    return () => {
+      isMounted = false;
+    };
+  }, [id, token]);
+
+  // Clean up generated image preview URLs.
+  useEffect(() => {
+    return () => {
+      newImagePreviews.forEach((preview) => {
+        URL.revokeObjectURL(preview);
+      });
+    };
+  }, [newImagePreviews]);
+
+  // Handle input changes.
   const handleInputChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
+  // Handle amenities.
   const handleAmenityChange = (amenity) => {
     setFormData((prev) => {
       const current = prev.amenities || [];
 
       if (current.includes(amenity)) {
-        return { ...prev, amenities: current.filter((a) => a !== amenity) };
-      } else {
-        return { ...prev, amenities: [...current, amenity] };
+        return {
+          ...prev,
+          amenities: current.filter((a) => a !== amenity),
+        };
       }
+
+      return {
+        ...prev,
+        amenities: [...current, amenity],
+      };
     });
   };
 
+  // Handle new image uploads.
   const handleNewImageChange = (e) => {
-    const files = Array.from(e.target.files);
+    const files = Array.from(e.target.files || []);
 
     if (existingImages.length + newImages.length + files.length > 10) {
       setError("Total images cannot exceed 10.");
+      e.target.value = "";
       return;
     }
 
+    setError(null);
+
     setNewImages((prev) => [...prev, ...files]);
 
-    const previews = files.map((file) => URL.createObjectURL(file));
+    const previews = files.map((file) =>
+      URL.createObjectURL(file)
+    );
 
-    setNewImagePreviews((prev) => [...prev, ...previews]);
+    setNewImagePreviews((prev) => [
+      ...prev,
+      ...previews,
+    ]);
+
+    // Allow selecting the same file again if needed.
+    e.target.value = "";
   };
 
+  // Remove an existing image.
   const removeExistingImage = (url) => {
-    setExistingImages(existingImages.filter((img) => img !== url));
+    setExistingImages((prev) =>
+      prev.filter((img) => img !== url)
+    );
   };
 
+  // Remove a newly selected image.
   const removeNewImage = (index) => {
-    setNewImages(newImages.filter((_, i) => i !== index));
-    setNewImagePreviews(newImagePreviews.filter((_, i) => i !== index));
+    setNewImages((prev) =>
+      prev.filter((_, i) => i !== index)
+    );
+
+    setNewImagePreviews((prev) =>
+      prev.filter((_, i) => i !== index)
+    );
   };
 
-  // to submit the updated listing
+  // Submit updated property.
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -195,6 +280,11 @@ const EditProperty = () => {
       return;
     }
 
+    if (!token) {
+      setError("Please log in again to update this property.");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
@@ -203,38 +293,64 @@ const EditProperty = () => {
     Object.keys(formData).forEach((key) => {
       if (key === "amenities") {
         data.append("amenities", JSON.stringify(formData[key]));
-      } else if (key === "securityDeposit" || key === "maintenance") {
+      } else if (
+        key === "securityDeposit" ||
+        key === "maintenance"
+      ) {
         data.append(key, formData[key] || 0);
       } else {
         data.append(key, formData[key]);
       }
     });
 
-    data.append("existingImages", JSON.stringify(existingImages));
+    data.append(
+      "existingImages",
+      JSON.stringify(existingImages)
+    );
 
-    newImages.forEach((img) => data.append("images", img));
+    newImages.forEach((img) => {
+      data.append("images", img);
+    });
 
     try {
-      await axios.put(`${API_URL}/api/property/${id}`, data, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await axios.put(
+        `${API_URL}/api/property/${id}`,
+        data,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      alert(
+        response.data.message ||
+        "Property updated successfully. Waiting for admin verification."
+      );
 
       navigate("/dashboard");
     } catch (err) {
-      setError(err.response?.data?.message || "Failed to update property");
+      console.error(
+        "UPDATE_PROPERTY_ERROR:",
+        err.response?.data || err
+      );
+
+      setError(
+        err.response?.data?.message ||
+        "Failed to update property."
+      );
+
       setSubmitting(false);
     }
   };
 
-  if (loading)
+  if (loading) {
     return (
       <div className="loader-full-page">
         <div className="loader"></div>
       </div>
     );
+  }
 
   return (
     <div className={s.pageContainer}>
@@ -269,12 +385,16 @@ const EditProperty = () => {
           <div className={s.section}>
             <div className={s.sectionHeader}>
               <div className={s.sectionIndicator}></div>
-              <h3 className={s.sectionTitle}>Content & Description</h3>
+              <h3 className={s.sectionTitle}>
+                Content & Description
+              </h3>
             </div>
 
             <div className={s.sectionContent}>
               <div>
-                <label className={s.label}>Property Title</label>
+                <label className={s.label}>
+                  Property Title
+                </label>
 
                 <input
                   type="text"
@@ -288,7 +408,9 @@ const EditProperty = () => {
               </div>
 
               <div>
-                <label className={s.label}>Detailed Description</label>
+                <label className={s.label}>
+                  Detailed Description
+                </label>
 
                 <textarea
                   name="description"
@@ -303,16 +425,20 @@ const EditProperty = () => {
           </div>
 
           <div className={s.twoColumnGrid}>
-            {/* Section 2: Property Details */}
+            {/* Property Details */}
             <div>
               <div className={s.sectionHeader}>
                 <div className={s.sectionIndicator}></div>
-                <h3 className={s.sectionTitle}>Property Details</h3>
+                <h3 className={s.sectionTitle}>
+                  Property Details
+                </h3>
               </div>
 
               <div className={s.sectionContent}>
                 <div>
-                  <label className={s.label}>Property Type</label>
+                  <label className={s.label}>
+                    Property Type
+                  </label>
 
                   <select
                     name="propertyType"
@@ -321,7 +447,9 @@ const EditProperty = () => {
                     className={s.select}
                   >
                     <option value="flat">Flat/Apartment</option>
-                    <option value="villa">Independent House/Villa</option>
+                    <option value="villa">
+                      Independent House/Villa
+                    </option>
                     <option value="penthouse">Penthouse</option>
                     <option value="commercial">Commercial</option>
                   </select>
@@ -339,11 +467,14 @@ const EditProperty = () => {
                       placeholder="e.g. 3"
                       className={s.input}
                       min="1"
+                      required
                     />
                   </div>
 
                   <div>
-                    <label className={s.label}>Bathrooms</label>
+                    <label className={s.label}>
+                      Bathrooms
+                    </label>
 
                     <input
                       type="number"
@@ -353,11 +484,14 @@ const EditProperty = () => {
                       placeholder="e.g. 2"
                       className={s.input}
                       min="1"
+                      required
                     />
                   </div>
 
                   <div>
-                    <label className={s.label}>Area (Sq.Ft)</label>
+                    <label className={s.label}>
+                      Area (Sq.Ft)
+                    </label>
 
                     <input
                       type="number"
@@ -374,7 +508,9 @@ const EditProperty = () => {
 
                 <div className={s.twoColumnGridInner}>
                   <div>
-                    <label className={s.label}>Furnishing</label>
+                    <label className={s.label}>
+                      Furnishing
+                    </label>
 
                     <select
                       name="furnishing"
@@ -382,14 +518,22 @@ const EditProperty = () => {
                       onChange={handleInputChange}
                       className={s.select}
                     >
-                      <option value="unfurnished">Unfurnished</option>
-                      <option value="semi-furnished">Semi-Furnished</option>
-                      <option value="furnished">Fully Furnished</option>
+                      <option value="unfurnished">
+                        Unfurnished
+                      </option>
+                      <option value="semi-furnished">
+                        Semi-Furnished
+                      </option>
+                      <option value="furnished">
+                        Fully Furnished
+                      </option>
                     </select>
                   </div>
 
                   <div>
-                    <label className={s.label}>Listing Status</label>
+                    <label className={s.label}>
+                      Listing Status
+                    </label>
 
                     <select
                       name="status"
@@ -405,16 +549,20 @@ const EditProperty = () => {
               </div>
             </div>
 
-            {/* Section 3: Pricing & Location */}
+            {/* Pricing & Location */}
             <div>
               <div className={s.sectionHeader}>
                 <div className={s.sectionIndicator}></div>
-                <h3 className={s.sectionTitle}>Pricing & Location</h3>
+                <h3 className={s.sectionTitle}>
+                  Pricing & Location
+                </h3>
               </div>
 
               <div className={s.sectionContent}>
                 <div>
-                  <label className={s.label}>Price (₹)</label>
+                  <label className={s.label}>
+                    Price (₹)
+                  </label>
 
                   <input
                     type="number"
@@ -437,21 +585,23 @@ const EditProperty = () => {
                       name="city"
                       value={formData.city}
                       onChange={handleInputChange}
-                      placeholder="e.g. Mumbai"
+                      placeholder="e.g. Kathmandu"
                       className={s.input}
                       required
                     />
                   </div>
 
                   <div>
-                    <label className={s.label}>Pincode</label>
+                    <label className={s.label}>
+                      Pincode
+                    </label>
 
                     <input
                       type="text"
                       name="pincode"
                       value={formData.pincode}
                       onChange={handleInputChange}
-                      placeholder="e.g. 400001"
+                      placeholder="e.g. 44600"
                       className={s.input}
                       required
                     />
@@ -459,14 +609,16 @@ const EditProperty = () => {
                 </div>
 
                 <div>
-                  <label className={s.label}>Specific Area</label>
+                  <label className={s.label}>
+                    Specific Area
+                  </label>
 
                   <input
                     type="text"
                     name="area"
                     value={formData.area}
                     onChange={handleInputChange}
-                    placeholder="e.g. Worli"
+                    placeholder="e.g. Baneshwor"
                     className={s.input}
                     required
                   />
@@ -475,6 +627,7 @@ const EditProperty = () => {
             </div>
           </div>
 
+          {/* Amenities */}
           <div className={s.section}>
             <div className={s.sectionHeader}>
               <div className={s.sectionIndicator}></div>
@@ -508,17 +661,22 @@ const EditProperty = () => {
             </div>
           </div>
 
-          {/* Section 5: Image Management */}
+          {/* Image Management */}
           <div className={s.section}>
             <div className={s.sectionHeader}>
               <div className={s.sectionIndicator}></div>
-              <h3 className={s.sectionTitle}>Image Management</h3>
+              <h3 className={s.sectionTitle}>
+                Image Management
+              </h3>
             </div>
 
             <div className={s.imageGrid}>
               {/* Existing Images */}
               {existingImages.map((src, i) => (
-                <div key={`existing-${i}`} className={s.imageCard}>
+                <div
+                  key={`existing-${i}`}
+                  className={s.imageCard}
+                >
                   <img
                     src={getExistingImageSrc(src)}
                     alt={`Existing property ${i + 1}`}
@@ -533,16 +691,21 @@ const EditProperty = () => {
                     <HiX size={12} />
                   </button>
 
-                  <div className={s.imageBadgeExisting}>EXISTING</div>
+                  <div className={s.imageBadgeExisting}>
+                    EXISTING
+                  </div>
                 </div>
               ))}
 
               {/* New Image Previews */}
               {newImagePreviews.map((src, i) => (
-                <div key={`new-${i}`} className={s.imageCardNew}>
+                <div
+                  key={`new-${i}`}
+                  className={s.imageCardNew}
+                >
                   <img
                     src={src}
-                    alt="New Preview"
+                    alt={`New property preview ${i + 1}`}
                     className={s.imageCardImg}
                   />
 
@@ -554,11 +717,13 @@ const EditProperty = () => {
                     <HiX size={12} />
                   </button>
 
-                  <div className={s.imageBadgeNew}>NEW</div>
+                  <div className={s.imageBadgeNew}>
+                    NEW
+                  </div>
                 </div>
               ))}
 
-              {/* Upload Button overlay */}
+              {/* Upload Button */}
               {existingImages.length + newImages.length < 10 && (
                 <div className={s.uploadCard}>
                   <input
@@ -571,17 +736,21 @@ const EditProperty = () => {
 
                   <HiUpload size={22} color="#64748b" />
 
-                  <span className={s.uploadText}>Add Image</span>
+                  <span className={s.uploadText}>
+                    Add Image
+                  </span>
                 </div>
               )}
             </div>
           </div>
 
+          {/* Form Actions */}
           <div className={s.formActions}>
             <button
               type="button"
               onClick={() => navigate("/dashboard")}
               className={s.cancelButton}
+              disabled={submitting}
             >
               Cancel
             </button>

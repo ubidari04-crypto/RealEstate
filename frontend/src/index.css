@@ -3,31 +3,40 @@
 @import "tailwindcss";
 
 @theme {
-    --color-primary: #0d9488;
-    --color-primary-light: #ccfbf1;
-    --color-primary-dark: #0f766e;
-    --color-secondary: #f0fdfa;
-    --color-accent: #f59e0b;
-    --color-border: #e5e7eb;
-    --shadow-card: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    /* Professional Navy/Slate Theme */
+    --color-primary: #0f172a;      
+    --color-primary-light: #f1f5f9; 
+    --color-primary-dark: #1e293b;  
+    --color-secondary: #f8fafc;
+    --color-accent: #3b82f6;        
+    
+    /* Missing utility colors added here */
+    --color-border: #e2e8f0;
+    --color-border-color: #e2e8f0;
+    --color-text-main: #0f172a;
+    --color-text-muted: #64748b;
+    --color-bg-main: #ffffff;
+    --color-bg-alt: #f8fafc;
+
+    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.025);
 }
 
 @layer base {
     :root {
-        --primary: #0d9488;
-        --primary-light: #ccfbf1;
-        --primary-dark: #0f766e;
-        --secondary: #f0fdfa;
-        --accent: #f59e0b;
-        --text-main: #111827;
-        --text-muted: #6b7280;
+        --primary: #0f172a;
+        --primary-light: #f1f5f9;
+        --primary-dark: #1e293b;
+        --secondary: #f8fafc;
+        --accent: #3b82f6;
+        --text-main: #0f172a;
+        --text-muted: #64748b;
         --bg-main: #ffffff;
-        --bg-alt: #f9fafb;
-        --border-color: #e5e7eb;
-        --card-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-        --glass-bg: rgba(255, 255, 255, 0.8);
-        --glass-border: rgba(255, 255, 255, 0.3);
-        --card-padding: 2.5rem;
+        --bg-alt: #f8fafc;
+        --border-color: #e2e8f0;
+        --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        --glass-bg: rgba(255, 255, 255, 0.95);
+        --glass-border: rgba(226, 232, 240, 0.8);
+        --card-padding: 2rem;
     }
 
     * {
@@ -35,18 +44,18 @@
     }
 
     body {
-        @apply font-sans text-[#111827] bg-[#ffffff] leading-relaxed antialiased overflow-x-hidden;
+        @apply font-sans text-[#0f172a] bg-[#ffffff] leading-relaxed antialiased overflow-x-hidden;
     }
 
     h1,
     h2,
     h3,
     h4 {
-        @apply font-bold leading-tight;
+        @apply font-bold leading-tight tracking-tight;
     }
 
     a {
-        @apply no-underline text-inherit;
+        @apply no-underline text-inherit transition-colors duration-200;
     }
 
     ul {
@@ -62,37 +71,38 @@
 
 @layer components {
     .container {
-        @apply max-w-[1280px] mx-auto px-8;
+        @apply max-w-[1280px] mx-auto px-6 md:px-8;
     }
 
+    /* Cleaned up glass effect */
     .glass {
-        @apply bg-white/80 backdrop-blur-[12px] border border-white/30;
+        @apply bg-white/95 backdrop-blur-sm border border-[#e2e8f0] shadow-sm;
     }
 
     .text-gradient {
-        @apply bg-gradient-to-br from-primary to-primary-dark bg-clip-text text-transparent;
+        @apply text-[#0f172a]; /* Removed gradient for a solid, professional look */
     }
 
-    /* Buttons */
+    /* Buttons: Structured with rounded-md instead of rounded-xl */
     .btn {
-        @apply inline-flex items-center justify-center px-6 py-3 rounded-xl font-semibold cursor-pointer transition-all duration-300 border-none text-[15px] gap-2;
+        @apply inline-flex items-center justify-center px-5 py-2.5 rounded-md font-semibold cursor-pointer transition-colors duration-200 border text-[14px] gap-2;
     }
 
     .btn-primary {
-        @apply bg-primary text-white hover:bg-primary-dark hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/30;
+        @apply bg-primary text-white border-primary hover:bg-primary-dark shadow-sm;
     }
 
     .btn-outline {
-        @apply bg-transparent border border-border text-[#111827] hover:bg-[#f9fafb] hover:border-[#111827] hover:-translate-y-0.5;
+        @apply bg-transparent border border-[#e2e8f0] text-text-main hover:bg-[#f8fafc] hover:border-[#cbd5e1];
     }
 
     /* Layouts */
     .seller-layout {
-        @apply flex min-h-screen bg-[#f9fafb];
+        @apply flex min-h-screen bg-[#f8fafc];
     }
 
     .seller-content {
-        @apply flex-1 ml-[260px] p-12 min-h-screen;
+        @apply flex-1 ml-[260px] p-8 min-h-screen;
     }
 
     .dashboard-layout {
@@ -104,32 +114,30 @@
     }
 
     .dashboard-content {
-        @apply p-10 max-w-[1600px] w-full box-border flex flex-col;
+        @apply p-8 max-w-[1600px] w-full box-border flex flex-col;
     }
 
     .dashboard-mobile-header {
         @apply !hidden;
     }
 
-    /* Cards */
+    /* Cards: Reduced border radius and subtle hover effect */
     .card-premium {
-        @apply bg-white rounded-3xl border border-border transition-all duration-[0.4s] overflow-hidden hover:-translate-y-2.5 hover:shadow-card;
+        @apply bg-white rounded-lg border border-[#e2e8f0] transition-all duration-200 overflow-hidden shadow-sm hover:-translate-y-1 hover:shadow-md;
     }
 
-    /* Badges */
+    /* Badges: Rectangular with slight rounding */
     .badge {
-        @apply px-3 py-1.5 rounded-full text-xs font-semibold uppercase tracking-[0.025em];
+        @apply px-2 py-0.5 rounded text-[0.7rem] font-bold uppercase tracking-wider border;
     }
 
     .badge-sale {
-        @apply bg-[#dcfce7] text-[#166534];
+        @apply bg-[#f0fdf4] text-[#166534] border-[#dcfce7];
     }
 
     .badge-rent {
-        @apply bg-[#dbeafe] text-[#1e40af];
+        @apply bg-[#eff6ff] text-[#1e40af] border-[#dbeafe];
     }
-
-
 
     /* Loader */
     .loader-container {
@@ -137,20 +145,20 @@
     }
 
     .loader-full-page {
-        @apply fixed inset-0 bg-white/80 z-[9999] flex justify-center items-center;
+        @apply fixed inset-0 bg-white/90 z-[9999] flex justify-center items-center backdrop-blur-sm;
     }
 
     .loader {
-        @apply w-12 h-12 border-[5px] border-primary-light border-b-primary rounded-full inline-block box-border animate-[rotation_1s_linear_infinite];
+        @apply w-10 h-10 border-[4px] border-[#e2e8f0] border-b-primary rounded-full inline-block box-border animate-[rotation_1s_linear_infinite];
     }
 
-    /* Sidebar Navigation */
+    /* Sidebar Navigation: Cleaner hover states */
     .sidebar-link {
-        @apply flex items-center gap-4 px-6 py-4 rounded-xl font-semibold text-[15px] text-[#64748b] transition-all duration-200 hover:bg-[#f1f5f9] hover:text-primary hover:translate-x-1;
+        @apply flex items-center gap-3 px-4 py-2.5 rounded-md font-medium text-[14px] text-[#64748b] transition-colors duration-200 hover:bg-[#f1f5f9] hover:text-[#0f172a];
     }
 
     .sidebar-link.active {
-        @apply bg-primary-light text-primary;
+        @apply bg-[#f1f5f9] text-[#0f172a] font-bold border-l-4 border-primary rounded-l-none;
     }
 }
 
@@ -165,7 +173,7 @@
     }
 
     .fade-in {
-        @apply animate-[fadeIn_0.8s_ease-out_forwards];
+        @apply animate-[fadeIn_0.5s_ease-out_forwards]; /* Faster, snappier fade */
     }
 
     @media (max-width: 1024px) {
@@ -236,7 +244,7 @@
 @keyframes fadeIn {
     from {
         opacity: 0;
-        transform: translateY(20px);
+        transform: translateY(10px); /* Reduced movement for elegance */
     }
 
     to {
